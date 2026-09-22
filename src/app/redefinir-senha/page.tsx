@@ -60,7 +60,7 @@ export default function RedefinirSenhaPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#020617] p-6 text-slate-200">
       <div className={`${cardClasses} w-full max-w-md p-8`}>
         <div className="mb-6 flex items-center gap-3">
-          <Image src="/logo-contasy.png" alt="Contasy Private" width={48} height={48} className="rounded-xl" />
+          <Image src="/logo-contasy-private.png" alt="Contasy Private" width={48} height={48} className="rounded-xl" />
           <h1 className="text-xl font-semibold text-[#d8b362]">Criar nova senha</h1>
         </div>
 

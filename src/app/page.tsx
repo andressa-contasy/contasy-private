@@ -49,7 +49,7 @@ export default function DashboardPage() {
         className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-5"
       >
         <Image
-          src="/logo-contasy.png"
+          src="/logo-contasy-private.png"
           alt=""
           width={800}
           height={800}
@@ -60,7 +60,7 @@ export default function DashboardPage() {
       <div className="relative max-w-6xl mx-auto">
         <header className="flex items-center gap-4 mb-8 pb-4 border-b border-[#d8b362]/20">
           <Image
-            src="/logo-contasy.png"
+            src="/logo-contasy-private.png"
             alt="Contasy Private"
             width={56}
             height={56}

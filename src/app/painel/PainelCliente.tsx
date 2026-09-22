@@ -69,13 +69,13 @@ export default function PainelCliente({
       data-exportando={exportando ? '' : undefined}
     >
       <div className={styles.watermark} aria-hidden="true">
-        <Image src="/logo-contasy.png" alt="" width={720} height={720} />
+        <Image src="/logo-contasy-private.png" alt="" width={720} height={720} />
       </div>
 
       <div className={styles.container}>
         <header className={styles.header}>
           <div className={styles.marca}>
-            <Image src="/logo-contasy.png" alt="Contasy Private" width={52} height={52} priority />
+            <Image src="/logo-contasy-private.png" alt="Contasy Private" width={52} height={52} priority />
             <div>
               <div className={styles.marcaNome}>
                 CONTASY <span>PRIVATE</span>

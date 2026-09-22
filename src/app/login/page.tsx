@@ -97,12 +97,12 @@ function LoginForm() {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#020617] p-6 text-slate-200">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-5">
-        <Image src="/logo-contasy.png" alt="" width={800} height={800} className="h-auto w-[min(80vw,800px)] select-none" />
+        <Image src="/logo-contasy-private.png" alt="" width={800} height={800} className="h-auto w-[min(80vw,800px)] select-none" />
       </div>
 
       <div className={`${cardClasses} relative w-full max-w-md p-8`}>
         <div className="mb-6 flex items-center gap-4">
-          <Image src="/logo-contasy.png" alt="Contasy Private" width={56} height={56} priority className="rounded-xl" />
+          <Image src="/logo-contasy-private.png" alt="Contasy Private" width={56} height={56} priority className="rounded-xl" />
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-wide text-white">CONTASY</h1>
