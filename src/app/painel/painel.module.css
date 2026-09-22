@@ -1,0 +1,571 @@
+/* Painel do cliente. Cores em hexadecimal/rgba de propósito: o gerador de PDF (html2canvas)
+   não entende as cores oklch() do Tailwind v4. */
+
+.painel {
+  position: relative;
+  overflow: hidden;
+  background: #050a18;
+  color: #e5e7eb;
+  padding: 32px 0 56px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.painel[data-exportando] {
+  width: 1240px;
+}
+
+.watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.watermark img {
+  width: 720px;
+  height: 720px;
+}
+
+.container {
+  position: relative;
+  width: 1200px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
+/* Cabeçalho */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 22px;
+  margin-bottom: 26px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.marca img {
+  border-radius: 12px;
+}
+
+.marcaNome {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.marcaNome span {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.marcaSub {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #d8b362;
+}
+
+.seletor {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.seletorRotulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.select,
+.selectEstatico {
+  background: #0b1325;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color-scheme: dark;
+}
+
+.select:focus {
+  outline: 2px solid rgba(216, 179, 98, 0.5);
+  border-color: #d8b362;
+}
+
+.periodoPersonalizado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Cartões */
+.card {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 18px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.cardTitulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.cardTitulo svg {
+  color: #d8b362;
+  flex: none;
+}
+
+.relatorio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.relatorioTitulo {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.relatorioEmpresa {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.contador {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 10px 18px 10px 12px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #d8b362;
+  background: rgba(216, 179, 98, 0.12);
+  color: #d8b362;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.contadorRotulo {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #d8b362;
+  text-transform: uppercase;
+}
+
+.contadorNome {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.contadorCrc {
+  font-size: 11px;
+  color: #d8b362;
+}
+
+/* KPIs */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.kpiTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kpiRotulo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.kpiIcone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(216, 179, 98, 0.12);
+  color: #d8b362;
+  flex: none;
+}
+
+.kpiValor {
+  margin-top: 14px;
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.kpiSub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.positivo {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.negativo {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.destaque {
+  color: #d8b362;
+}
+
+/* Grade principal */
+.grade {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.planejamentoTopo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planejamentoTopo .cardTitulo {
+  margin: 0;
+}
+
+.selo {
+  border: 1px solid rgba(216, 179, 98, 0.55);
+  background: rgba(216, 179, 98, 0.08);
+  color: #d8b362;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.descricao {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.caixaInterna {
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+}
+
+.cenarios {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 20px;
+}
+
+.cenarioRotulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.cenarioValor {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.vermelho { color: #f87171; }
+.verde { color: #34d399; }
+.dourado { color: #d8b362; }
+
+/* Time Contasy em ação */
+.time {
+  border: 1px solid rgba(216, 179, 98, 0.55);
+  background: linear-gradient(180deg, rgba(216, 179, 98, 0.07), rgba(15, 23, 42, 0.72));
+}
+
+.timeTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.timeRotulo {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #d8b362;
+  text-transform: uppercase;
+}
+
+.timeTotal {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.15;
+}
+
+.timeSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.timeIcone {
+  color: #d8b362;
+  flex: none;
+}
+
+.nfs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.nfCaixa {
+  padding: 12px 14px;
+}
+
+.nfRotulo {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d8b362;
+}
+
+.nfQtd {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.nfValor {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* Gráfico */
+.grafico {
+  position: relative;
+  height: 300px;
+}
+
+/* Ações */
+.acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.acao {
+  border-left: 3px solid #d8b362;
+  padding-left: 14px;
+}
+
+.acaoTitulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.acaoMes {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d8b362;
+}
+
+.acaoDescricao {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.vazio {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* Sócios */
+.socios {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.socio {
+  padding: 16px 18px;
+}
+
+.socioNome {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.socioLinha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.socioLinha strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.socioLinha strong.verde { color: #34d399; }
+.socioLinha strong.dourado { color: #d8b362; }
+
+/* Tabela de impostos */
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela th {
+  padding: 0 12px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.tabela td {
+  padding: 14px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 14px;
+  color: #e2e8f0;
+}
+
+.tabela td:first-child {
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.pct {
+  display: inline-block;
+  border: 1px solid rgba(216, 179, 98, 0.45);
+  background: rgba(216, 179, 98, 0.08);
+  color: #d8b362;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rodape {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 11px;
+  color: #64748b;
+}
+
+@media (max-width: 1000px) {
+  .header,
+  .relatorio {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpis,
+  .grade {
+    grid-template-columns: 1fr;
+  }
+
+  .cenarios {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,18 @@
+# dependências e builds
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# chaves e segredos: NUNCA versionar
+.env
+.env.*
+!.env.example
+
+# sistema e editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.vercel
