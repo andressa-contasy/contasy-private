@@ -39,3 +39,12 @@ export const rotuloRegime = (regime?: string | null) =>
 
 export const rotuloPorte = (porte?: string | null) =>
   porte ? (PORTES[porte as keyof typeof PORTES] ?? porte) : '—';
+
+// Soma as alíquotas digitadas dos impostos de uma guia (um mês). Se faltar a alíquota de
+// algum imposto lançado naquele mês, retorna null em vez de somar só uma parte — uma soma
+// incompleta subestimaria o total e voltaria a induzir a erro.
+export function somarAliquotas(linhas: { aliquota: number | null }[]): number | null {
+  if (linhas.length === 0) return null;
+  if (linhas.some((l) => l.aliquota === null)) return null;
+  return linhas.reduce((total, l) => total + (l.aliquota as number), 0);
+}

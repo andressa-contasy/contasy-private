@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { brl, pct } from '../../../lib/formatacao';
+import { brl, pct, somarAliquotas } from '../../../lib/formatacao';
 import { calcularPainel, carregarDados, contarMeses, deslocarMes, rotuloMes } from '../../../lib/painel';
 import type { DadosEmpresa } from '../../../lib/painel';
 import { goldButtonClasses, ghostButtonClasses } from '../../../lib/estilos';
@@ -313,7 +313,10 @@ export default function ConsultaEmpresaPage() {
                       <td className="px-3 py-2 text-right text-slate-300">{moeda(l.faturamento)}</td>
                       <td className="px-3 py-2 text-right text-slate-300">{moeda(l.totalImpostos)}</td>
                       <td className="px-3 py-2 text-right text-slate-300">
-                        {l.faturamento > 0 ? `${pct.format((l.totalImpostos / l.faturamento) * 100)}%` : '—'}
+                        {(() => {
+                          const aliquota = somarAliquotas(l.impostos);
+                          return aliquota === null ? '—' : `${pct.format(aliquota)}%`;
+                        })()}
                       </td>
                       <td className="px-3 py-2 text-right text-slate-300">{l.nfeQtd + l.nfseQtd}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right">

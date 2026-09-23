@@ -12,6 +12,7 @@ import {
   mesAtual,
   pct,
   rotuloRegime,
+  somarAliquotas,
 } from '../lib/formatacao';
 import { goldButtonClasses, ghostButtonClasses, inputClasses, labelClasses } from '../lib/estilos';
 
@@ -117,6 +118,8 @@ export default function LancamentosModal({
 }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
   const [totaisImpostos, setTotaisImpostos] = useState<Record<string, number>>({}); // em reais
+  // Soma das alíquotas digitadas por lançamento; null = falta a alíquota de algum imposto do mês
+  const [aliquotaPorLancamento, setAliquotaPorLancamento] = useState<Record<string, number | null>>({});
   const [impostosRegime, setImpostosRegime] = useState<ImpostoRegime[]>([]);
   const [socios, setSocios] = useState<Socio[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -227,18 +230,25 @@ export default function LancamentosModal({
     setLancamentos(lista);
 
     const totais: Record<string, number> = {};
+    const aliquotasPorId: Record<string, { aliquota: number | null }[]> = {};
     if (lista.length > 0) {
       const { data: imp, error: erroImp } = await supabase
         .from('lancamento_impostos')
-        .select('lancamento_id, valor')
+        .select('lancamento_id, valor, aliquota')
         .in('lancamento_id', lista.map((l) => l.id));
 
       if (erroImp) setErro(`Erro ao carregar impostos: ${erroImp.message}`);
       for (const linha of imp ?? []) {
         totais[linha.lancamento_id] = (totais[linha.lancamento_id] ?? 0) + Number(linha.valor);
+        (aliquotasPorId[linha.lancamento_id] ??= []).push({
+          aliquota: linha.aliquota === null ? null : Number(linha.aliquota),
+        });
       }
     }
     setTotaisImpostos(totais);
+    setAliquotaPorLancamento(
+      Object.fromEntries(Object.entries(aliquotasPorId).map(([id, linhas]) => [id, somarAliquotas(linhas)])),
+    );
     setCarregando(false);
   }, [empresa.id]);
 
@@ -740,13 +750,14 @@ export default function LancamentosModal({
                 lancamentos.map((l) => {
                   const impostos = totaisImpostos[l.id] ?? 0;
                   const fat = Number(l.faturamento);
+                  const aliquota = aliquotaPorLancamento[l.id] ?? null;
                   return (
                     <tr key={l.id} className="border-b border-white/5">
                       <td className="py-2 px-3 text-white">{formatarMes(l.mes_referencia)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">{brl.format(fat)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">{brl.format(impostos)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">
-                        {fat > 0 ? `${pct.format((impostos / fat) * 100)}%` : '—'}
+                        {aliquota === null ? '—' : `${pct.format(aliquota)}%`}
                       </td>
                       <td className="py-2 px-3 text-right">
                         <button
