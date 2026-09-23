@@ -295,66 +295,13 @@
   min-width: 0;
 }
 
-.planejamentoTopo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.planejamentoTopo .cardTitulo {
-  margin: 0;
-}
-
-.selo {
-  border: 1px solid rgba(216, 179, 98, 0.55);
-  background: rgba(216, 179, 98, 0.08);
-  color: #d8b362;
-  border-radius: 999px;
-  padding: 4px 14px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.descricao {
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: #cbd5e1;
-}
-
 .caixaInterna {
   background: rgba(2, 6, 23, 0.55);
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 12px;
 }
 
-.cenarios {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  padding: 20px;
-}
-
-.cenarioRotulo {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  text-transform: uppercase;
-}
-
-.cenarioValor {
-  margin-top: 6px;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1.15;
-}
-
-.vermelho { color: #f87171; }
 .verde { color: #34d399; }
-.dourado { color: #d8b362; }
 
 /* Time Contasy em ação */
 .time {
@@ -505,7 +452,6 @@
 }
 
 .socioLinha strong.verde { color: #34d399; }
-.socioLinha strong.dourado { color: #d8b362; }
 
 /* Tabela de impostos */
 .tabela {
@@ -562,10 +508,6 @@
 
   .kpis,
   .grade {
-    grid-template-columns: 1fr;
-  }
-
-  .cenarios {
     grid-template-columns: 1fr;
   }
 }

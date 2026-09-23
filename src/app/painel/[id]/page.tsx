@@ -299,9 +299,8 @@ export default function ConsultaEmpresaPage() {
                     <th className="px-3 py-2 font-medium">Competência</th>
                     <th className="px-3 py-2 text-right font-medium">Faturamento</th>
                     <th className="px-3 py-2 text-right font-medium">Impostos</th>
-                    <th className="px-3 py-2 text-right font-medium">Carga</th>
+                    <th className="px-3 py-2 text-right font-medium">Alíquota</th>
                     <th className="px-3 py-2 text-right font-medium">NFs</th>
-                    <th className="px-3 py-2 text-right font-medium">Economia</th>
                     <th className="px-3 py-2 text-right font-medium">
                       <span className="sr-only">Ações</span>
                     </th>
@@ -317,9 +316,6 @@ export default function ConsultaEmpresaPage() {
                         {l.faturamento > 0 ? `${pct.format((l.totalImpostos / l.faturamento) * 100)}%` : '—'}
                       </td>
                       <td className="px-3 py-2 text-right text-slate-300">{l.nfeQtd + l.nfseQtd}</td>
-                      <td className="px-3 py-2 text-right text-[#d8b362]">
-                        {l.cenario > 0 ? moeda(l.cenario - l.totalImpostos) : '—'}
-                      </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right">
                         <button
                           type="button"

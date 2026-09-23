@@ -723,8 +723,7 @@ export default function LancamentosModal({
                 <th className="py-2 px-3 font-medium">Mês</th>
                 <th className="py-2 px-3 font-medium text-right">Faturamento</th>
                 <th className="py-2 px-3 font-medium text-right">Impostos</th>
-                <th className="py-2 px-3 font-medium text-right">Carga</th>
-                <th className="py-2 px-3 font-medium text-right">Economia</th>
+                <th className="py-2 px-3 font-medium text-right">Alíquota</th>
                 <th className="py-2 px-3 font-medium text-right">
                   <span className="sr-only">Ações</span>
                 </th>
@@ -733,7 +732,7 @@ export default function LancamentosModal({
             <tbody>
               {carregando ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-slate-500">
+                  <td colSpan={5} className="py-4 text-center text-slate-500">
                     Carregando...
                   </td>
                 </tr>
@@ -741,7 +740,6 @@ export default function LancamentosModal({
                 lancamentos.map((l) => {
                   const impostos = totaisImpostos[l.id] ?? 0;
                   const fat = Number(l.faturamento);
-                  const eco = Number(l.cenario_sem_otimizacao) - impostos;
                   return (
                     <tr key={l.id} className="border-b border-white/5">
                       <td className="py-2 px-3 text-white">{formatarMes(l.mes_referencia)}</td>
@@ -749,9 +747,6 @@ export default function LancamentosModal({
                       <td className="py-2 px-3 text-right text-slate-300">{brl.format(impostos)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">
                         {fat > 0 ? `${pct.format((impostos / fat) * 100)}%` : '—'}
-                      </td>
-                      <td className="py-2 px-3 text-right text-[#d8b362]">
-                        {Number(l.cenario_sem_otimizacao) > 0 ? brl.format(eco) : '—'}
                       </td>
                       <td className="py-2 px-3 text-right">
                         <button
@@ -770,7 +765,7 @@ export default function LancamentosModal({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-slate-500">
+                  <td colSpan={5} className="py-4 text-center text-slate-500">
                     Nenhum lançamento para esta empresa ainda.
                   </td>
                 </tr>

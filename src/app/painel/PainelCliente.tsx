@@ -9,13 +9,12 @@ import {
   FileText,
   ListChecks,
   Percent,
-  Scale,
   ScrollText,
   TrendingUp,
   UserCheck,
   Wallet,
 } from 'lucide-react';
-import { brl, pct, rotuloRegime } from '../../lib/formatacao';
+import { brl, pct } from '../../lib/formatacao';
 import { rotuloMes } from '../../lib/painel';
 import type { DadosEmpresa, ResultadoPainel } from '../../lib/painel';
 import EvolucaoChart from './EvolucaoChart';
@@ -58,9 +57,6 @@ export default function PainelCliente({
   const r = resultado;
   const unicoMes = r.meses === 1;
   const periodoTexto = unicoMes ? 'do Mês' : 'do Período';
-
-  const regimeAtual = rotuloRegime(empresa.regime_tributario);
-  const regimeAnterior = empresa.regime_anterior ? rotuloRegime(empresa.regime_anterior) : null;
 
   return (
     <div
@@ -168,36 +164,6 @@ export default function PainelCliente({
 
         <div className={styles.grade}>
           <div className={styles.coluna}>
-            <section className={styles.card}>
-              <div className={styles.planejamentoTopo}>
-                <h2 className={styles.cardTitulo}>
-                  <Scale size={18} /> Planejamento e Economia Tributária
-                </h2>
-                <span className={styles.selo}>Estratégia Ativa</span>
-              </div>
-              <p className={styles.descricao}>
-                {regimeAnterior
-                  ? `Comparativo do regime tributário atual (${regimeAtual}) em relação ao modelo anterior (${regimeAnterior}):`
-                  : `Regime tributário atual: ${regimeAtual}.`}
-              </p>
-              <div className={`${styles.caixaInterna} ${styles.cenarios}`}>
-                <div>
-                  <div className={styles.cenarioRotulo}>Cenário sem otimização</div>
-                  <div className={`${styles.cenarioValor} ${styles.vermelho}`}>
-                    {r.cenario > 0 ? moeda(r.cenario) : '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className={styles.cenarioRotulo}>Com otimização Private</div>
-                  <div className={`${styles.cenarioValor} ${styles.verde}`}>{moeda(r.totalImpostos)}</div>
-                </div>
-                <div>
-                  <div className={styles.cenarioRotulo}>Economia acumulada no ano</div>
-                  <div className={`${styles.cenarioValor} ${styles.dourado}`}>{moeda(r.economiaAno)}</div>
-                </div>
-              </div>
-            </section>
-
             <section className={styles.card}>
               <h2 className={styles.cardTitulo}>
                 <TrendingUp size={18} /> Evolução da Carga Tributária Efetiva (%)
