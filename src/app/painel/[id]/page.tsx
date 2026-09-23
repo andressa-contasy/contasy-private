@@ -299,6 +299,8 @@ export default function ConsultaEmpresaPage() {
                     <th className="px-3 py-2 font-medium">Competência</th>
                     <th className="px-3 py-2 text-right font-medium">Receita</th>
                     <th className="px-3 py-2 text-right font-medium">Impostos</th>
+                    <th className="px-3 py-2 text-right font-medium">Juros</th>
+                    <th className="px-3 py-2 text-right font-medium">Multas</th>
                     <th className="px-3 py-2 text-right font-medium">Alíquota</th>
                     <th className="px-3 py-2 text-right font-medium">NFs</th>
                     <th className="px-3 py-2 text-right font-medium">
@@ -307,16 +309,20 @@ export default function ConsultaEmpresaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...dados.lancamentos].reverse().map((l) => (
+                  {[...dados.lancamentos].reverse().map((l) => {
+                    const somaValor = l.impostos.reduce((t, i) => t + i.valor, 0);
+                    const somaJuros = l.impostos.reduce((t, i) => t + i.juros, 0);
+                    const somaMulta = l.impostos.reduce((t, i) => t + i.multa, 0);
+                    const aliquota = somarAliquotas(l.impostos);
+                    return (
                     <tr key={l.id} className="border-b border-white/5 hover:bg-white/5">
                       <td className="px-3 py-2 text-white">{rotuloMes(l.mes)}</td>
                       <td className="px-3 py-2 text-right text-slate-300">{moeda(l.faturamento)}</td>
-                      <td className="px-3 py-2 text-right text-slate-300">{moeda(l.totalImpostos)}</td>
+                      <td className="px-3 py-2 text-right text-slate-300">{moeda(somaValor)}</td>
+                      <td className="px-3 py-2 text-right text-slate-300">{moeda(somaJuros)}</td>
+                      <td className="px-3 py-2 text-right text-slate-300">{moeda(somaMulta)}</td>
                       <td className="px-3 py-2 text-right text-slate-300">
-                        {(() => {
-                          const aliquota = somarAliquotas(l.impostos);
-                          return aliquota === null ? '—' : `${pct.format(aliquota)}%`;
-                        })()}
+                        {aliquota === null ? '—' : `${pct.format(aliquota)}%`}
                       </td>
                       <td className="px-3 py-2 text-right text-slate-300">{l.nfeQtd + l.nfseQtd}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right">
@@ -342,7 +348,8 @@ export default function ConsultaEmpresaPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

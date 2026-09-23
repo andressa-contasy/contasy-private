@@ -117,7 +117,10 @@ export default function LancamentosModal({
   onAtualizado?: () => void;
 }) {
   const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
-  const [totaisImpostos, setTotaisImpostos] = useState<Record<string, number>>({}); // em reais
+  // Soma de valor/juros/multa por lançamento (em reais), para o histórico mostrar cada um à parte
+  const [decomposicaoImpostos, setDecomposicaoImpostos] = useState<
+    Record<string, { valor: number; juros: number; multa: number }>
+  >({});
   // Soma das alíquotas digitadas por lançamento; null = falta a alíquota de algum imposto do mês
   const [aliquotaPorLancamento, setAliquotaPorLancamento] = useState<Record<string, number | null>>({});
   const [impostosRegime, setImpostosRegime] = useState<ImpostoRegime[]>([]);
@@ -245,7 +248,7 @@ export default function LancamentosModal({
     const lista: Lancamento[] = data ?? [];
     setLancamentos(lista);
 
-    const totais: Record<string, number> = {};
+    const decomposicao: Record<string, { valor: number; juros: number; multa: number }> = {};
     const aliquotasPorId: Record<string, { aliquota: number | null }[]> = {};
     if (lista.length > 0) {
       const { data: imp, error: erroImp } = await supabase
@@ -255,14 +258,16 @@ export default function LancamentosModal({
 
       if (erroImp) setErro(`Erro ao carregar impostos: ${erroImp.message}`);
       for (const linha of imp ?? []) {
-        const total = Number(linha.valor) + Number(linha.juros ?? 0) + Number(linha.multa ?? 0);
-        totais[linha.lancamento_id] = (totais[linha.lancamento_id] ?? 0) + total;
+        const atual = (decomposicao[linha.lancamento_id] ??= { valor: 0, juros: 0, multa: 0 });
+        atual.valor += Number(linha.valor);
+        atual.juros += Number(linha.juros ?? 0);
+        atual.multa += Number(linha.multa ?? 0);
         (aliquotasPorId[linha.lancamento_id] ??= []).push({
           aliquota: linha.aliquota === null ? null : Number(linha.aliquota),
         });
       }
     }
-    setTotaisImpostos(totais);
+    setDecomposicaoImpostos(decomposicao);
     setAliquotaPorLancamento(
       Object.fromEntries(Object.entries(aliquotasPorId).map(([id, linhas]) => [id, somarAliquotas(linhas)])),
     );
@@ -808,6 +813,8 @@ export default function LancamentosModal({
                 <th className="py-2 px-3 font-medium">Mês</th>
                 <th className="py-2 px-3 font-medium text-right">Receita</th>
                 <th className="py-2 px-3 font-medium text-right">Impostos</th>
+                <th className="py-2 px-3 font-medium text-right">Juros</th>
+                <th className="py-2 px-3 font-medium text-right">Multas</th>
                 <th className="py-2 px-3 font-medium text-right">Alíquota</th>
                 <th className="py-2 px-3 font-medium text-right">
                   <span className="sr-only">Ações</span>
@@ -817,20 +824,22 @@ export default function LancamentosModal({
             <tbody>
               {carregando ? (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-slate-500">
+                  <td colSpan={7} className="py-4 text-center text-slate-500">
                     Carregando...
                   </td>
                 </tr>
               ) : lancamentos.length > 0 ? (
                 lancamentos.map((l) => {
-                  const impostos = totaisImpostos[l.id] ?? 0;
+                  const decomp = decomposicaoImpostos[l.id] ?? { valor: 0, juros: 0, multa: 0 };
                   const fat = Number(l.faturamento);
                   const aliquota = aliquotaPorLancamento[l.id] ?? null;
                   return (
                     <tr key={l.id} className="border-b border-white/5">
                       <td className="py-2 px-3 text-white">{formatarMes(l.mes_referencia)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">{brl.format(fat)}</td>
-                      <td className="py-2 px-3 text-right text-slate-300">{brl.format(impostos)}</td>
+                      <td className="py-2 px-3 text-right text-slate-300">{brl.format(decomp.valor)}</td>
+                      <td className="py-2 px-3 text-right text-slate-300">{brl.format(decomp.juros)}</td>
+                      <td className="py-2 px-3 text-right text-slate-300">{brl.format(decomp.multa)}</td>
                       <td className="py-2 px-3 text-right text-slate-300">
                         {aliquota === null ? '—' : `${pct.format(aliquota)}%`}
                       </td>
@@ -851,7 +860,7 @@ export default function LancamentosModal({
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-slate-500">
+                  <td colSpan={7} className="py-4 text-center text-slate-500">
                     Nenhum lançamento para esta empresa ainda.
                   </td>
                 </tr>
