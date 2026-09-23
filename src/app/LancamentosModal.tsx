@@ -135,8 +135,13 @@ export default function LancamentosModal({
   const [nfseValor, setNfseValor] = useState(0);
   const [cenario, setCenario] = useState(0);
   const [valoresImposto, setValoresImposto] = useState<Record<string, number>>({});
+  // Juros e multa por atraso, por imposto (centavos) — normalmente zero
+  const [valoresJuros, setValoresJuros] = useState<Record<string, number>>({});
+  const [valoresMulta, setValoresMulta] = useState<Record<string, number>>({});
   // Alíquota (%) de cada imposto, digitada pelo contador (texto, aceita vírgula)
   const [aliquotas, setAliquotas] = useState<Record<string, string>>({});
+  // Campos de juros/multa ficam escondidos por padrão (uso ocasional); abertos quando já têm valor
+  const [jurosMultaAbertos, setJurosMultaAbertos] = useState<Record<string, boolean>>({});
   const [extras, setExtras] = useState<string[]>([]); // impostos não sugeridos ativados pelo usuário
   const [remuneracao, setRemuneracao] = useState<Record<string, Remuneracao>>({});
   const [acoes, setAcoes] = useState<Acao[]>([]);
@@ -153,8 +158,16 @@ export default function LancamentosModal({
   // Trimestrais só valem no mês de fechamento do trimestre
   const valorEfetivo = (i: ImpostoRegime) =>
     i.periodicidade === 'trimestral' && !trimestreAberto ? 0 : (valoresImposto[i.tipo_imposto_id] ?? 0);
+  const jurosEfetivo = (i: ImpostoRegime) =>
+    i.periodicidade === 'trimestral' && !trimestreAberto ? 0 : (valoresJuros[i.tipo_imposto_id] ?? 0);
+  const multaEfetiva = (i: ImpostoRegime) =>
+    i.periodicidade === 'trimestral' && !trimestreAberto ? 0 : (valoresMulta[i.tipo_imposto_id] ?? 0);
 
-  const totalImpostos = impostosAtivos.reduce((total, i) => total + valorEfetivo(i), 0);
+  // Total pago por imposto = valor + juros + multa; é isso que compõe o total de impostos do mês
+  const totalImpostos = impostosAtivos.reduce(
+    (total, i) => total + valorEfetivo(i) + jurosEfetivo(i) + multaEfetiva(i),
+    0,
+  );
   const carga = faturamento > 0 ? Math.round((totalImpostos / faturamento) * 10000) / 100 : 0;
   const economia = cenario - totalImpostos;
   const somaNfs = nfeValor + nfseValor;
@@ -167,7 +180,10 @@ export default function LancamentosModal({
     setNfseValor(0);
     setCenario(0);
     setValoresImposto({});
+    setValoresJuros({});
+    setValoresMulta({});
     setAliquotas({});
+    setJurosMultaAbertos({});
     setExtras([]);
     setRemuneracao({});
     setAcoes([]);
@@ -234,12 +250,13 @@ export default function LancamentosModal({
     if (lista.length > 0) {
       const { data: imp, error: erroImp } = await supabase
         .from('lancamento_impostos')
-        .select('lancamento_id, valor, aliquota')
+        .select('lancamento_id, valor, aliquota, juros, multa')
         .in('lancamento_id', lista.map((l) => l.id));
 
       if (erroImp) setErro(`Erro ao carregar impostos: ${erroImp.message}`);
       for (const linha of imp ?? []) {
-        totais[linha.lancamento_id] = (totais[linha.lancamento_id] ?? 0) + Number(linha.valor);
+        const total = Number(linha.valor) + Number(linha.juros ?? 0) + Number(linha.multa ?? 0);
+        totais[linha.lancamento_id] = (totais[linha.lancamento_id] ?? 0) + total;
         (aliquotasPorId[linha.lancamento_id] ??= []).push({
           aliquota: linha.aliquota === null ? null : Number(linha.aliquota),
         });
@@ -267,7 +284,10 @@ export default function LancamentosModal({
     let cancelado = false;
     (async () => {
       const [imp, rem, aco] = await Promise.all([
-        supabase.from('lancamento_impostos').select('tipo_imposto_id, valor, aliquota').eq('lancamento_id', existente.id),
+        supabase
+          .from('lancamento_impostos')
+          .select('tipo_imposto_id, valor, aliquota, juros, multa')
+          .eq('lancamento_id', existente.id),
         supabase
           .from('remuneracao_socios')
           .select('socio_id, pro_labore, distribuicao_lucros')
@@ -290,8 +310,19 @@ export default function LancamentosModal({
       setCenario(emCentavos(existente.cenario_sem_otimizacao));
 
       const valores: Record<string, number> = {};
-      for (const l of imp.data ?? []) valores[l.tipo_imposto_id] = emCentavos(l.valor);
+      const juros: Record<string, number> = {};
+      const multas: Record<string, number> = {};
+      const abertos: Record<string, boolean> = {};
+      for (const l of imp.data ?? []) {
+        valores[l.tipo_imposto_id] = emCentavos(l.valor);
+        juros[l.tipo_imposto_id] = emCentavos(l.juros);
+        multas[l.tipo_imposto_id] = emCentavos(l.multa);
+        if (juros[l.tipo_imposto_id] > 0 || multas[l.tipo_imposto_id] > 0) abertos[l.tipo_imposto_id] = true;
+      }
       setValoresImposto(valores);
+      setValoresJuros(juros);
+      setValoresMulta(multas);
+      setJurosMultaAbertos(abertos);
       const aliqs: Record<string, string> = {};
       for (const l of imp.data ?? []) {
         if (l.aliquota !== null) aliqs[l.tipo_imposto_id] = String(Number(l.aliquota)).replace('.', ',');
@@ -382,15 +413,17 @@ export default function LancamentosModal({
       lancamentoId = data.id;
     }
 
-    // 2. Impostos (só os com valor; remove os que deixaram de existir)
+    // 2. Impostos (só os com valor, juros ou multa; remove os que deixaram de existir)
     const linhasImpostos = impostosAtivos
       .map((i) => ({
         lancamento_id: lancamentoId,
         tipo_imposto_id: i.tipo_imposto_id,
         valor: valorEfetivo(i) / 100,
         aliquota: lerAliquota(aliquotas[i.tipo_imposto_id]),
+        juros: jurosEfetivo(i) / 100,
+        multa: multaEfetiva(i) / 100,
       }))
-      .filter((l) => l.valor > 0);
+      .filter((l) => l.valor > 0 || l.juros > 0 || l.multa > 0);
 
     if (linhasImpostos.length > 0) {
       const { error } = await supabase
@@ -564,12 +597,41 @@ export default function LancamentosModal({
                             />
                           </div>
                         </div>
+                        {!bloqueado &&
+                          (jurosMultaAbertos[i.tipo_imposto_id] ? (
+                            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                              <CampoMoeda
+                                id={`juros-${i.codigo}`}
+                                rotulo={`Juros ${i.codigo} (R$)`}
+                                centavos={valoresJuros[i.tipo_imposto_id] ?? 0}
+                                onChange={(c) => setValoresJuros((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
+                              />
+                              <CampoMoeda
+                                id={`multa-${i.codigo}`}
+                                rotulo={`Multa ${i.codigo} (R$)`}
+                                centavos={valoresMulta[i.tipo_imposto_id] ?? 0}
+                                onChange={(c) => setValoresMulta((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setJurosMultaAbertos((prev) => ({ ...prev, [i.tipo_imposto_id]: true }))
+                              }
+                              className="mt-2 text-xs text-slate-400 hover:text-[#d8b362]"
+                            >
+                              + Juros/multa por atraso ({i.codigo})
+                            </button>
+                          ))}
                         {!i.sugerido && (
                           <button
                             type="button"
                             onClick={() => {
                               setExtras((prev) => prev.filter((id) => id !== i.tipo_imposto_id));
                               setValoresImposto((prev) => ({ ...prev, [i.tipo_imposto_id]: 0 }));
+                              setValoresJuros((prev) => ({ ...prev, [i.tipo_imposto_id]: 0 }));
+                              setValoresMulta((prev) => ({ ...prev, [i.tipo_imposto_id]: 0 }));
                             }}
                             className="mt-1 text-xs text-slate-400 hover:text-red-300"
                           >

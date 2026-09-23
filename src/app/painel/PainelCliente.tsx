@@ -194,7 +194,16 @@ export default function PainelCliente({
                     {r.impostos.map((i) => (
                       <tr key={i.codigo}>
                         <td>{i.codigo}</td>
-                        <td>{moeda(i.valor)}</td>
+                        <td>
+                          {moeda(i.valor + i.juros + i.multa)}
+                          {(i.juros > 0 || i.multa > 0) && (
+                            <div className={styles.detalheEncargo}>
+                              {[i.juros > 0 && `Juros ${moeda(i.juros)}`, i.multa > 0 && `Multa ${moeda(i.multa)}`]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
+                          )}
+                        </td>
                         <td>
                           <span className={styles.pct}>
                             {i.aliquota === null ? '—' : i.aliquota === 'variavel' ? 'Variável' : `${pct.format(i.aliquota)}%`}

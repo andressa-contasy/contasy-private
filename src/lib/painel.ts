@@ -20,7 +20,16 @@ export const contarMeses = (de: string, ate: string) =>
 
 // Todos os valores monetários deste módulo estão em centavos
 // aliquota: percentual digitado pelo contador (null = não informada)
-export type ImpostoLinha = { codigo: string; nome: string; ordem: number; valor: number; aliquota: number | null };
+// juros/multa: encargos por atraso no pagamento daquele imposto (normalmente zero)
+export type ImpostoLinha = {
+  codigo: string;
+  nome: string;
+  ordem: number;
+  valor: number;
+  aliquota: number | null;
+  juros: number;
+  multa: number;
+};
 
 export type LancamentoCompleto = {
   id: string;
@@ -78,7 +87,7 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
     ? await Promise.all([
         supabase
           .from('lancamento_impostos')
-          .select('lancamento_id, valor, aliquota, tipos_imposto(codigo, nome, ordem)')
+          .select('lancamento_id, valor, aliquota, juros, multa, tipos_imposto(codigo, nome, ordem)')
           .in('lancamento_id', ids),
         supabase
           .from('remuneracao_socios')
@@ -95,6 +104,8 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
     lancamento_id: string;
     valor: number;
     aliquota: number | null;
+    juros: number;
+    multa: number;
     tipos_imposto: { codigo: string; nome: string; ordem: number };
   }>;
 
@@ -105,6 +116,8 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
         ...i.tipos_imposto,
         valor: emCentavos(i.valor),
         aliquota: i.aliquota === null ? null : Number(i.aliquota),
+        juros: emCentavos(i.juros),
+        multa: emCentavos(i.multa),
       }));
     return {
       id: l.id,
@@ -116,7 +129,8 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
       nfseQtd: l.nfse_servico_qtd,
       nfseValor: emCentavos(l.nfse_servico_valor),
       impostos,
-      totalImpostos: impostos.reduce((t, i) => t + i.valor, 0),
+      // Total pago por imposto = valor + juros + multa
+      totalImpostos: impostos.reduce((t, i) => t + i.valor + i.juros + i.multa, 0),
       remuneracao: (rem.data ?? [])
         .filter((r) => r.lancamento_id === l.id)
         .map((r) => ({
@@ -174,7 +188,15 @@ export type ResultadoPainel = {
   nfse: { qtd: number; valor: number };
   totalNfs: number;
   // aliquota: a digitada; 'variavel' = mudou entre os meses do período; null = não informada
-  impostos: { codigo: string; nome: string; valor: number; aliquota: number | 'variavel' | null }[];
+  // valor: só o imposto (principal); juros/multa: encargos por atraso, somados à parte
+  impostos: {
+    codigo: string;
+    nome: string;
+    valor: number;
+    juros: number;
+    multa: number;
+    aliquota: number | 'variavel' | null;
+  }[];
   socios: { id: string; nome: string; ordem: number; proLabore: number; distribuicao: number }[];
   acoes: { mes: string; titulo: string; descricao: string }[];
   evolucao: { mes: string; carga: number }[];
@@ -201,28 +223,46 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
   // mudou entre os meses, fica "variável".
   const porImposto = new Map<
     string,
-    { codigo: string; nome: string; ordem: number; valor: number; aliquotas: (number | null)[] }
+    {
+      codigo: string;
+      nome: string;
+      ordem: number;
+      valor: number;
+      juros: number;
+      multa: number;
+      aliquotas: (number | null)[];
+    }
   >();
   for (const l of atuais) {
     for (const i of l.impostos) {
       const atual = porImposto.get(i.codigo);
       if (atual) {
         atual.valor += i.valor;
+        atual.juros += i.juros;
+        atual.multa += i.multa;
         atual.aliquotas.push(i.aliquota);
       } else {
-        porImposto.set(i.codigo, { codigo: i.codigo, nome: i.nome, ordem: i.ordem, valor: i.valor, aliquotas: [i.aliquota] });
+        porImposto.set(i.codigo, {
+          codigo: i.codigo,
+          nome: i.nome,
+          ordem: i.ordem,
+          valor: i.valor,
+          juros: i.juros,
+          multa: i.multa,
+          aliquotas: [i.aliquota],
+        });
       }
     }
   }
   const impostos = [...porImposto.values()]
-    .filter((i) => i.valor > 0)
+    .filter((i) => i.valor > 0 || i.juros > 0 || i.multa > 0)
     .sort((a, b) => a.ordem - b.ordem)
     .map((i) => {
       const informadas = i.aliquotas.filter((a): a is number => a !== null);
       const distintas = new Set(informadas.map((a) => a.toFixed(4)));
       const aliquota =
         informadas.length < i.aliquotas.length ? null : distintas.size === 1 ? informadas[0] : ('variavel' as const);
-      return { codigo: i.codigo, nome: i.nome, valor: i.valor, aliquota };
+      return { codigo: i.codigo, nome: i.nome, valor: i.valor, juros: i.juros, multa: i.multa, aliquota };
     });
 
   // Pró-labore e distribuição de lucros ficam sempre separados. Com mais de um mês

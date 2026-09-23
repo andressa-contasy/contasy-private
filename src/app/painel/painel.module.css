@@ -481,6 +481,13 @@
   color: #ffffff;
 }
 
+.detalheEncargo {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #f59e0b;
+}
+
 .pct {
   display: inline-block;
   border: 1px solid rgba(216, 179, 98, 0.45);
