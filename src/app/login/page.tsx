@@ -1,66 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
-import { cardClasses, goldButtonClasses, inputClasses, labelClasses } from '../../lib/estilos';
+import { cardClasses, goldButtonClasses } from '../../lib/estilos';
 
+// Acesso normalmente vem do portal Neowit (a sessão chega sozinha). Esta tela só aparece
+// para quem abre o endereço do Private direto, sem passar pelo portal.
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
   const [entrando, setEntrando] = useState(false);
-  const [enviandoLink, setEnviandoLink] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
 
-  // Quem já está logado vai direto para o painel
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) router.replace('/');
     });
   }, [router]);
 
-  async function entrar(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function entrarComGoogle() {
+    setErro(null);
     setEntrando(true);
-    setErro(null);
-    setAviso(null);
-
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
-
-    if (error) {
-      setErro(
-        error.message === 'Invalid login credentials'
-          ? 'E-mail ou senha incorretos.'
-          : `Não foi possível entrar: ${error.message}`,
-      );
-      setEntrando(false);
-      return;
-    }
-    router.replace('/');
-  }
-
-  async function esqueciSenha() {
-    setErro(null);
-    setAviso(null);
-    if (!email.trim()) {
-      setErro('Digite seu e-mail acima e clique em "Esqueci minha senha" de novo.');
-      return;
-    }
-    setEnviandoLink(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/redefinir-senha`,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
     });
-    setEnviandoLink(false);
+    // Em caso de sucesso o navegador já é redirecionado para o Google; só chega aqui se falhar
     if (error) {
-      setErro(`Não foi possível enviar o link: ${error.message}`);
-      return;
+      setErro(`Não foi possível entrar com Google: ${error.message}`);
+      setEntrando(false);
     }
-    // Mesma resposta exista ou não o e-mail, para não revelar quem tem conta
-    setAviso('Se este e-mail tiver acesso, você vai receber um link para criar uma nova senha.');
   }
 
   return (
@@ -83,53 +53,28 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <form onSubmit={entrar} className="grid gap-4">
-          <div>
-            <label htmlFor="email" className={labelClasses}>E-mail</label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputClasses}
-            />
-          </div>
-          <div>
-            <label htmlFor="senha" className={labelClasses}>Senha</label>
-            <input
-              id="senha"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className={inputClasses}
-            />
-          </div>
+        <button
+          type="button"
+          onClick={entrarComGoogle}
+          disabled={entrando}
+          className={`${goldButtonClasses} flex w-full items-center justify-center gap-3 rounded-lg px-5 py-2.5`}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z" />
+            <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03z" />
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z" />
+          </svg>
+          {entrando ? 'Redirecionando...' : 'Entrar com Google'}
+        </button>
 
-          <button type="submit" disabled={entrando} className={`${goldButtonClasses} rounded-lg px-5 py-2.5`}>
-            {entrando ? 'Entrando...' : 'Entrar'}
-          </button>
-
-          <button
-            type="button"
-            onClick={esqueciSenha}
-            disabled={enviandoLink}
-            className="justify-self-center text-sm text-[#d8b362] hover:underline disabled:opacity-60"
-          >
-            {enviandoLink ? 'Enviando...' : 'Esqueci minha senha'}
-          </button>
-        </form>
+        <p className="mt-4 text-center text-xs text-slate-500">
+          Use a mesma conta Google do Portal Neowit. Seu acesso ao Private é liberado pelo
+          administrador do portal.
+        </p>
 
         {erro && (
           <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{erro}</div>
-        )}
-        {aviso && (
-          <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
-            {aviso}
-          </div>
         )}
       </div>
     </main>
