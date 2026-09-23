@@ -599,19 +599,32 @@ export default function LancamentosModal({
                         </div>
                         {!bloqueado &&
                           (jurosMultaAbertos[i.tipo_imposto_id] ? (
-                            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                              <CampoMoeda
-                                id={`juros-${i.codigo}`}
-                                rotulo={`Juros ${i.codigo} (R$)`}
-                                centavos={valoresJuros[i.tipo_imposto_id] ?? 0}
-                                onChange={(c) => setValoresJuros((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
-                              />
-                              <CampoMoeda
-                                id={`multa-${i.codigo}`}
-                                rotulo={`Multa ${i.codigo} (R$)`}
-                                centavos={valoresMulta[i.tipo_imposto_id] ?? 0}
-                                onChange={(c) => setValoresMulta((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
-                              />
+                            <div className="mt-3">
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <CampoMoeda
+                                  id={`juros-${i.codigo}`}
+                                  rotulo={`Juros ${i.codigo} (R$)`}
+                                  centavos={valoresJuros[i.tipo_imposto_id] ?? 0}
+                                  onChange={(c) => setValoresJuros((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
+                                />
+                                <CampoMoeda
+                                  id={`multa-${i.codigo}`}
+                                  rotulo={`Multa ${i.codigo} (R$)`}
+                                  centavos={valoresMulta[i.tipo_imposto_id] ?? 0}
+                                  onChange={(c) => setValoresMulta((prev) => ({ ...prev, [i.tipo_imposto_id]: c }))}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setJurosMultaAbertos((prev) => ({ ...prev, [i.tipo_imposto_id]: false }));
+                                  setValoresJuros((prev) => ({ ...prev, [i.tipo_imposto_id]: 0 }));
+                                  setValoresMulta((prev) => ({ ...prev, [i.tipo_imposto_id]: 0 }));
+                                }}
+                                className="mt-1 text-xs text-slate-400 hover:text-red-300"
+                              >
+                                − Ocultar juros/multa ({i.codigo})
+                              </button>
                             </div>
                           ) : (
                             <button
