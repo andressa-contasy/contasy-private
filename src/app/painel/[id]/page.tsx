@@ -297,7 +297,7 @@ export default function ConsultaEmpresaPage() {
                 <thead>
                   <tr className="border-b border-[#d8b362]/20 text-slate-400">
                     <th className="px-3 py-2 font-medium">Competência</th>
-                    <th className="px-3 py-2 text-right font-medium">Faturamento</th>
+                    <th className="px-3 py-2 text-right font-medium">Receita</th>
                     <th className="px-3 py-2 text-right font-medium">Impostos</th>
                     <th className="px-3 py-2 text-right font-medium">Alíquota</th>
                     <th className="px-3 py-2 text-right font-medium">NFs</th>

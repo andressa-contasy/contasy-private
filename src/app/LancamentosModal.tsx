@@ -495,9 +495,9 @@ export default function LancamentosModal({
             )}
           </div>
 
-          <Secao titulo="Faturamento e Notas Fiscais">
+          <Secao titulo="Receita e Notas Fiscais">
             <div className="grid gap-4 sm:grid-cols-2">
-              <CampoMoeda id="faturamento" rotulo="Faturamento da Competência (R$)" centavos={faturamento} onChange={setFaturamento} />
+              <CampoMoeda id="faturamento" rotulo="Receita da Competência (R$)" centavos={faturamento} onChange={setFaturamento} />
               <div className="hidden sm:block" />
               <div>
                 <label htmlFor="nfeQtd" className={labelClasses}>NF-e (Produto) — quantidade</label>
@@ -731,7 +731,7 @@ export default function LancamentosModal({
             <thead>
               <tr className="border-b border-[#d8b362]/20 text-slate-400">
                 <th className="py-2 px-3 font-medium">Mês</th>
-                <th className="py-2 px-3 font-medium text-right">Faturamento</th>
+                <th className="py-2 px-3 font-medium text-right">Receita</th>
                 <th className="py-2 px-3 font-medium text-right">Impostos</th>
                 <th className="py-2 px-3 font-medium text-right">Alíquota</th>
                 <th className="py-2 px-3 font-medium text-right">

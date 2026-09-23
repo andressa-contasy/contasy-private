@@ -104,7 +104,7 @@ export default function PainelCliente({
         <div className={styles.kpis}>
           <section className={styles.card}>
             <div className={styles.kpiTopo}>
-              <span className={styles.kpiRotulo}>Faturamento da Competência</span>
+              <span className={styles.kpiRotulo}>Receita da Competência</span>
               <span className={styles.kpiIcone}>
                 <TrendingUp size={18} />
               </span>
