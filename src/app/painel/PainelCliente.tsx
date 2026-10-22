@@ -229,6 +229,35 @@ export default function PainelCliente({
                 <p className={styles.vazio}>Nenhum imposto lançado no período.</p>
               )}
             </section>
+
+            <section className={styles.card}>
+              <h2 className={styles.cardTitulo}>
+                <Wallet size={18} /> Remuneração dos Sócios
+              </h2>
+              {r.socios.length > 0 ? (
+                <div className={styles.socios}>
+                  {r.socios.map((s, i) => (
+                    <div key={s.id} className={`${styles.caixaInterna} ${styles.socio}`}>
+                      <div className={styles.socioNome}>
+                        {s.nome} (Sócio {String(i + 1).padStart(2, '0')})
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Pró-labore {periodoTexto}:</span>
+                        <strong>{moeda(s.proLabore)}</strong>
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Distribuição de Lucros:</span>
+                        <strong className={styles.verde}>{moeda(s.distribuicao)}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={styles.vazio}>
+                  {cadastroSocios.length === 0 ? 'Nenhum sócio cadastrado.' : 'Sem lançamentos no período.'}
+                </p>
+              )}
+            </section>
           </div>
 
           <div className={styles.coluna}>
@@ -286,35 +315,6 @@ export default function PainelCliente({
                 </div>
               ) : (
                 <p className={styles.vazio}>Nenhuma ação registrada no período.</p>
-              )}
-            </section>
-
-            <section className={styles.card}>
-              <h2 className={styles.cardTitulo}>
-                <Wallet size={18} /> Remuneração dos Sócios
-              </h2>
-              {r.socios.length > 0 ? (
-                <div className={styles.socios}>
-                  {r.socios.map((s, i) => (
-                    <div key={s.id} className={`${styles.caixaInterna} ${styles.socio}`}>
-                      <div className={styles.socioNome}>
-                        {s.nome} (Sócio {String(i + 1).padStart(2, '0')})
-                      </div>
-                      <div className={styles.socioLinha}>
-                        <span>Pró-labore {periodoTexto}:</span>
-                        <strong>{moeda(s.proLabore)}</strong>
-                      </div>
-                      <div className={styles.socioLinha}>
-                        <span>Distribuição de Lucros:</span>
-                        <strong className={styles.verde}>{moeda(s.distribuicao)}</strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className={styles.vazio}>
-                  {cadastroSocios.length === 0 ? 'Nenhum sócio cadastrado.' : 'Sem lançamentos no período.'}
-                </p>
               )}
             </section>
           </div>
