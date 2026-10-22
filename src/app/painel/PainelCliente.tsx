@@ -191,9 +191,21 @@ export default function PainelCliente({
                     </tr>
                   </thead>
                   <tbody>
-                    {r.impostos.map((i) => (
-                      <tr key={i.codigo}>
-                        <td>{i.codigo}</td>
+                    {r.impostos.map((i, idx) => (
+                      <tr
+                        key={i.codigo}
+                        className={
+                          i.periodicidade === 'trimestral' && r.impostos[idx - 1]?.periodicidade === 'mensal'
+                            ? styles.inicioTrimestrais
+                            : undefined
+                        }
+                      >
+                        <td>
+                          {i.codigo}
+                          {i.periodicidade === 'trimestral' && (
+                            <span className={styles.tagTrimestral}>Trimestral</span>
+                          )}
+                        </td>
                         <td>
                           {moeda(i.valor + i.juros + i.multa)}
                           {(i.juros > 0 || i.multa > 0) && (
@@ -229,6 +241,7 @@ export default function PainelCliente({
                 </div>
                 <ScrollText className={styles.timeIcone} size={30} />
               </div>
+              <div className={styles.nfGrupoRotulo}>Saída</div>
               <div className={styles.nfs}>
                 <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
                   <div className={styles.nfRotulo}>NF-e (Produto)</div>
@@ -239,6 +252,18 @@ export default function PainelCliente({
                   <div className={styles.nfRotulo}>NFS-e (Serviço)</div>
                   <div className={styles.nfQtd}>{inteiro.format(r.nfse.qtd)} NFs</div>
                   <div className={styles.nfValor}>{moeda(r.nfse.valor)}</div>
+                </div>
+              </div>
+
+              <div className={styles.nfGrupoRotulo}>Entrada</div>
+              <div className={styles.nfs}>
+                <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
+                  <div className={styles.nfRotulo}>NF-e (Produto)</div>
+                  <div className={styles.nfQtd}>{inteiro.format(r.entradaProduto.qtd)} NFs</div>
+                </div>
+                <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
+                  <div className={styles.nfRotulo}>NFS-e (Serviço)</div>
+                  <div className={styles.nfQtd}>{inteiro.format(r.entradaServico.qtd)} NFs</div>
                 </div>
               </div>
             </section>

@@ -42,10 +42,17 @@ type Lancamento = {
   nfe_produto_valor: number;
   nfse_servico_qtd: number;
   nfse_servico_valor: number;
+  entrada_produto_qtd: number;
+  entrada_servico_qtd: number;
+  entrada_imposto_valor: number;
+  entrada_imposto_aliquota: number | null;
+  servico_tomado_imposto_valor: number;
+  servico_tomado_imposto_aliquota: number | null;
 };
 
-type Remuneracao = { proLabore: number; distribuicao: number }; // em centavos
+type Remuneracao = { distribuicao: number; tributos: number }; // em centavos
 type Acao = { titulo: string; descricao: string };
+type PessoaFolha = { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }; // valor/tributos em centavos
 
 // "0,65" -> 0.65. Vazio ou fora de 0–100 -> null (sem alíquota informada)
 function lerAliquota(texto: string | undefined) {
@@ -124,6 +131,10 @@ export default function LancamentosModal({
   // Soma das alíquotas digitadas por lançamento; null = falta a alíquota de algum imposto do mês
   const [aliquotaPorLancamento, setAliquotaPorLancamento] = useState<Record<string, number | null>>({});
   const [impostosRegime, setImpostosRegime] = useState<ImpostoRegime[]>([]);
+  // Impostos que já estavam lançados num mês antigo mas saíram do catálogo do regime
+  // (ex.: a empresa mudou de regime, ou o catálogo foi simplificado depois). Preserva o
+  // valor já salvo em vez de escondê-lo e apagá-lo na próxima gravação.
+  const [impostosLegado, setImpostosLegado] = useState<ImpostoRegime[]>([]);
   const [socios, setSocios] = useState<Socio[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -136,6 +147,14 @@ export default function LancamentosModal({
   const [nfeValor, setNfeValor] = useState(0);
   const [nfseQtd, setNfseQtd] = useState('0');
   const [nfseValor, setNfseValor] = useState(0);
+  const [entradaProdutoQtd, setEntradaProdutoQtd] = useState('0');
+  const [entradaServicoQtd, setEntradaServicoQtd] = useState('0');
+  // Impostos sobre Nota Fiscal de Entrada / Serviços Tomados (ex.: ICMS Difal, retenções).
+  // Não entram no Total de Impostos Apurados nem na Carga Tributária Efetiva por enquanto.
+  const [entradaImpostoValor, setEntradaImpostoValor] = useState(0);
+  const [entradaImpostoAliquota, setEntradaImpostoAliquota] = useState('');
+  const [servicoTomadoImpostoValor, setServicoTomadoImpostoValor] = useState(0);
+  const [servicoTomadoImpostoAliquota, setServicoTomadoImpostoAliquota] = useState('');
   const [cenario, setCenario] = useState(0);
   const [valoresImposto, setValoresImposto] = useState<Record<string, number>>({});
   // Juros e multa por atraso, por imposto (centavos) — normalmente zero
@@ -148,15 +167,25 @@ export default function LancamentosModal({
   const [extras, setExtras] = useState<string[]>([]); // impostos não sugeridos ativados pelo usuário
   const [remuneracao, setRemuneracao] = useState<Record<string, Remuneracao>>({});
   const [acoes, setAcoes] = useState<Acao[]>([]);
+  const [folha, setFolha] = useState<PessoaFolha[]>([]);
 
   const existente = lancamentos.find((l) => l.mes_referencia === mes);
   const trimestreAberto = ehMesFechamentoTrimestre(mes);
 
-  const impostosAtivos = useMemo(
-    () => impostosRegime.filter((i) => i.sugerido || extras.includes(i.tipo_imposto_id)),
-    [impostosRegime, extras],
+  // Catálogo do regime + qualquer imposto legado que ainda não esteja nele
+  const catalogoCompleto = useMemo(
+    () => [
+      ...impostosRegime,
+      ...impostosLegado.filter((l) => !impostosRegime.some((r) => r.tipo_imposto_id === l.tipo_imposto_id)),
+    ],
+    [impostosRegime, impostosLegado],
   );
-  const impostosDisponiveis = impostosRegime.filter((i) => !i.sugerido && !extras.includes(i.tipo_imposto_id));
+
+  const impostosAtivos = useMemo(
+    () => catalogoCompleto.filter((i) => i.sugerido || extras.includes(i.tipo_imposto_id)),
+    [catalogoCompleto, extras],
+  );
+  const impostosDisponiveis = catalogoCompleto.filter((i) => !i.sugerido && !extras.includes(i.tipo_imposto_id));
 
   // Trimestrais só valem no mês de fechamento do trimestre
   const valorEfetivo = (i: ImpostoRegime) =>
@@ -181,15 +210,23 @@ export default function LancamentosModal({
     setNfeValor(0);
     setNfseQtd('0');
     setNfseValor(0);
+    setEntradaProdutoQtd('0');
+    setEntradaServicoQtd('0');
+    setEntradaImpostoValor(0);
+    setEntradaImpostoAliquota('');
+    setServicoTomadoImpostoValor(0);
+    setServicoTomadoImpostoAliquota('');
     setCenario(0);
     setValoresImposto({});
     setValoresJuros({});
     setValoresMulta({});
     setAliquotas({});
     setJurosMultaAbertos({});
+    setImpostosLegado([]);
     setExtras([]);
     setRemuneracao({});
     setAcoes([]);
+    setFolha([]);
   }, []);
 
   const carregarBase = useCallback(async () => {
@@ -288,20 +325,25 @@ export default function LancamentosModal({
 
     let cancelado = false;
     (async () => {
-      const [imp, rem, aco] = await Promise.all([
+      const [imp, rem, aco, fol] = await Promise.all([
         supabase
           .from('lancamento_impostos')
           .select('tipo_imposto_id, valor, aliquota, juros, multa')
           .eq('lancamento_id', existente.id),
         supabase
           .from('remuneracao_socios')
-          .select('socio_id, pro_labore, distribuicao_lucros')
+          .select('socio_id, distribuicao_lucros, tributos')
           .eq('lancamento_id', existente.id),
         supabase.from('acoes_mes').select('titulo, descricao').eq('lancamento_id', existente.id).order('ordem'),
+        supabase
+          .from('folha_pagamento')
+          .select('nome, tipo, valor, tributos')
+          .eq('lancamento_id', existente.id)
+          .order('ordem'),
       ]);
       if (cancelado) return;
 
-      const falha = imp.error ?? rem.error ?? aco.error;
+      const falha = imp.error ?? rem.error ?? aco.error ?? fol.error;
       if (falha) {
         setErro(`Erro ao carregar o lançamento: ${falha.message}`);
         return;
@@ -312,7 +354,48 @@ export default function LancamentosModal({
       setNfeValor(emCentavos(existente.nfe_produto_valor));
       setNfseQtd(String(existente.nfse_servico_qtd));
       setNfseValor(emCentavos(existente.nfse_servico_valor));
+      setEntradaProdutoQtd(String(existente.entrada_produto_qtd ?? 0));
+      setEntradaServicoQtd(String(existente.entrada_servico_qtd ?? 0));
+      setEntradaImpostoValor(emCentavos(existente.entrada_imposto_valor));
+      setEntradaImpostoAliquota(
+        existente.entrada_imposto_aliquota === null
+          ? ''
+          : String(Number(existente.entrada_imposto_aliquota)).replace('.', ','),
+      );
+      setServicoTomadoImpostoValor(emCentavos(existente.servico_tomado_imposto_valor));
+      setServicoTomadoImpostoAliquota(
+        existente.servico_tomado_imposto_aliquota === null
+          ? ''
+          : String(Number(existente.servico_tomado_imposto_aliquota)).replace('.', ','),
+      );
       setCenario(emCentavos(existente.cenario_sem_otimizacao));
+
+      // Impostos lançados nesse mês que não fazem mais parte do catálogo do regime atual
+      // (ex.: regime simplificado depois). Busca os dados deles para não perder o valor salvo.
+      const idsConhecidos = new Set(impostosRegime.map((i) => i.tipo_imposto_id));
+      const idsLegado = [...new Set((imp.data ?? []).map((l) => l.tipo_imposto_id))].filter(
+        (id) => !idsConhecidos.has(id),
+      );
+      if (idsLegado.length > 0) {
+        const { data: tiposLegado } = await supabase
+          .from('tipos_imposto')
+          .select('id, codigo, nome, ordem')
+          .in('id', idsLegado);
+        if (!cancelado) {
+          setImpostosLegado(
+            (tiposLegado ?? []).map((t) => ({
+              tipo_imposto_id: t.id,
+              periodicidade: 'mensal' as const,
+              sugerido: false,
+              codigo: t.codigo,
+              nome: t.nome,
+              ordem: t.ordem,
+            })),
+          );
+        }
+      } else {
+        setImpostosLegado([]);
+      }
 
       const valores: Record<string, number> = {};
       const juros: Record<string, number> = {};
@@ -333,18 +416,28 @@ export default function LancamentosModal({
         if (l.aliquota !== null) aliqs[l.tipo_imposto_id] = String(Number(l.aliquota)).replace('.', ',');
       }
       setAliquotas(aliqs);
+      // Marca como "extra" todo imposto não-sugerido já lançado nesse mês, incluindo os legado
       setExtras(
-        impostosRegime
-          .filter((i) => !i.sugerido && valores[i.tipo_imposto_id] !== undefined)
-          .map((i) => i.tipo_imposto_id),
+        Object.keys(valores).filter((id) => {
+          const doCatalogo = impostosRegime.find((i) => i.tipo_imposto_id === id);
+          return !doCatalogo || !doCatalogo.sugerido;
+        }),
       );
 
       const rems: Record<string, Remuneracao> = {};
       for (const r of rem.data ?? []) {
-        rems[r.socio_id] = { proLabore: emCentavos(r.pro_labore), distribuicao: emCentavos(r.distribuicao_lucros) };
+        rems[r.socio_id] = { distribuicao: emCentavos(r.distribuicao_lucros), tributos: emCentavos(r.tributos) };
       }
       setRemuneracao(rems);
       setAcoes((aco.data ?? []).map((a) => ({ titulo: a.titulo, descricao: a.descricao })));
+      setFolha(
+        (fol.data ?? []).map((p) => ({
+          nome: p.nome,
+          tipo: p.tipo as 'socio' | 'colaborador',
+          valor: emCentavos(p.valor),
+          tributos: emCentavos(p.tributos),
+        })),
+      );
     })();
 
     return () => {
@@ -363,7 +456,7 @@ export default function LancamentosModal({
 
   const setRem = (socioId: string, campo: keyof Remuneracao, valor: number) =>
     setRemuneracao((prev) => {
-      const atual: Remuneracao = prev[socioId] ?? { proLabore: 0, distribuicao: 0 };
+      const atual: Remuneracao = prev[socioId] ?? { distribuicao: 0, tributos: 0 };
       return { ...prev, [socioId]: { ...atual, [campo]: valor } };
     });
 
@@ -386,6 +479,12 @@ export default function LancamentosModal({
     if (invalida) {
       return falhou('os impostos', `a alíquota de ${invalida.nome} é inválida (use um valor entre 0 e 100).`);
     }
+    if (entradaImpostoAliquota.trim() && lerAliquota(entradaImpostoAliquota) === null) {
+      return falhou('os impostos', 'a alíquota da Nota Fiscal de Entrada é inválida (use um valor entre 0 e 100).');
+    }
+    if (servicoTomadoImpostoAliquota.trim() && lerAliquota(servicoTomadoImpostoAliquota) === null) {
+      return falhou('os impostos', 'a alíquota de Serviços Tomados é inválida (use um valor entre 0 e 100).');
+    }
 
     // 1. Lançamento do mês
     const valores = {
@@ -396,6 +495,12 @@ export default function LancamentosModal({
       nfe_produto_valor: nfeValor / 100,
       nfse_servico_qtd: parseInt(nfseQtd, 10) || 0,
       nfse_servico_valor: nfseValor / 100,
+      entrada_produto_qtd: parseInt(entradaProdutoQtd, 10) || 0,
+      entrada_servico_qtd: parseInt(entradaServicoQtd, 10) || 0,
+      entrada_imposto_valor: entradaImpostoValor / 100,
+      entrada_imposto_aliquota: lerAliquota(entradaImpostoAliquota),
+      servico_tomado_imposto_valor: servicoTomadoImpostoValor / 100,
+      servico_tomado_imposto_aliquota: lerAliquota(servicoTomadoImpostoAliquota),
     };
 
     let lancamentoId: string;
@@ -445,18 +550,38 @@ export default function LancamentosModal({
       if (error) return falhou('os impostos', error.message);
     }
 
-    // 3. Remuneração dos sócios
+    // 3. Distribuição de lucros
     if (socios.length > 0) {
       const { error } = await supabase.from('remuneracao_socios').upsert(
         socios.map((s) => ({
           lancamento_id: lancamentoId,
           socio_id: s.id,
-          pro_labore: (remuneracao[s.id]?.proLabore ?? 0) / 100,
           distribuicao_lucros: (remuneracao[s.id]?.distribuicao ?? 0) / 100,
+          tributos: (remuneracao[s.id]?.tributos ?? 0) / 100,
         })),
         { onConflict: 'lancamento_id,socio_id' },
       );
-      if (error) return falhou('a remuneração dos sócios', error.message);
+      if (error) return falhou('a distribuição de lucros', error.message);
+    }
+
+    // 3b. Folha de pagamento (lista livre; apaga e recria, como as ações do mês)
+    {
+      const { error } = await supabase.from('folha_pagamento').delete().eq('lancamento_id', lancamentoId);
+      if (error) return falhou('a folha de pagamento', error.message);
+    }
+    const linhasFolha = folha
+      .filter((p) => p.nome.trim())
+      .map((p, i) => ({
+        lancamento_id: lancamentoId,
+        nome: p.nome.trim(),
+        tipo: p.tipo,
+        valor: p.valor / 100,
+        tributos: p.tributos / 100,
+        ordem: i + 1,
+      }));
+    if (linhasFolha.length > 0) {
+      const { error } = await supabase.from('folha_pagamento').insert(linhasFolha);
+      if (error) return falhou('a folha de pagamento', error.message);
     }
 
     // 4. Ações realizadas no mês
@@ -534,9 +659,12 @@ export default function LancamentosModal({
           </div>
 
           <Secao titulo="Receita e Notas Fiscais">
+            <CampoMoeda id="faturamento" rotulo="Receita da Competência (R$)" centavos={faturamento} onChange={setFaturamento} />
+
+            <p className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Notas Fiscais de Saída
+            </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <CampoMoeda id="faturamento" rotulo="Receita da Competência (R$)" centavos={faturamento} onChange={setFaturamento} />
-              <div className="hidden sm:block" />
               <div>
                 <label htmlFor="nfeQtd" className={labelClasses}>NF-e (Produto) — quantidade</label>
                 <input id="nfeQtd" type="number" min={0} value={nfeQtd} onChange={(e) => setNfeQtd(e.target.value)} className={inputClasses} />
@@ -550,11 +678,48 @@ export default function LancamentosModal({
             </div>
             {somaNfs > 0 && somaNfs !== faturamento && (
               <p className="mt-3 text-sm text-amber-300">
-                A soma das NFs ({formatarCentavos(somaNfs)}) é diferente do faturamento ({formatarCentavos(faturamento)}).
+                A soma das NFs de saída ({formatarCentavos(somaNfs)}) é diferente da receita ({formatarCentavos(faturamento)}).
               </p>
             )}
-            <p className="mt-3 text-xs text-slate-500">
-              Total de NFs escrituradas: {(parseInt(nfeQtd, 10) || 0) + (parseInt(nfseQtd, 10) || 0)}
+
+            <p className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Notas Fiscais de Entrada
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="entradaProdutoQtd" className={labelClasses}>NF-e (Produto) — Entrada — quantidade</label>
+                <input
+                  id="entradaProdutoQtd"
+                  type="number"
+                  min={0}
+                  value={entradaProdutoQtd}
+                  onChange={(e) => setEntradaProdutoQtd(e.target.value)}
+                  className={inputClasses}
+                />
+              </div>
+              <div>
+                <label htmlFor="entradaServicoQtd" className={labelClasses}>NFS-e (Serviço) — Entrada — quantidade</label>
+                <input
+                  id="entradaServicoQtd"
+                  type="number"
+                  min={0}
+                  value={entradaServicoQtd}
+                  onChange={(e) => setEntradaServicoQtd(e.target.value)}
+                  className={inputClasses}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Notas de entrada só registram a quantidade, para controle contábil — não entram na Receita nem na
+              alíquota efetiva.
+            </p>
+
+            <p className="mt-4 text-xs text-slate-500">
+              Total de NFs escrituradas no mês:{' '}
+              {(parseInt(nfeQtd, 10) || 0) +
+                (parseInt(nfseQtd, 10) || 0) +
+                (parseInt(entradaProdutoQtd, 10) || 0) +
+                (parseInt(entradaServicoQtd, 10) || 0)}
             </p>
           </Secao>
 
@@ -692,6 +857,62 @@ export default function LancamentosModal({
             )}
           </Secao>
 
+          <Secao titulo="Impostos sobre Nota Fiscal de Entrada/Serviços Tomados">
+            <div className="grid gap-5">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Nota Fiscal de Entrada
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
+                  <CampoMoeda
+                    id="entradaImpostoValor"
+                    rotulo="Valor (R$)"
+                    centavos={entradaImpostoValor}
+                    onChange={setEntradaImpostoValor}
+                  />
+                  <div>
+                    <label htmlFor="entradaImpostoAliquota" className={labelClasses}>Alíquota (%)</label>
+                    <input
+                      id="entradaImpostoAliquota"
+                      type="text"
+                      inputMode="decimal"
+                      value={entradaImpostoAliquota}
+                      onChange={(e) => setEntradaImpostoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                      placeholder="Ex.: 0,65"
+                      className={inputClasses}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Serviços Tomados</p>
+                <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
+                  <CampoMoeda
+                    id="servicoTomadoImpostoValor"
+                    rotulo="Valor (R$)"
+                    centavos={servicoTomadoImpostoValor}
+                    onChange={setServicoTomadoImpostoValor}
+                  />
+                  <div>
+                    <label htmlFor="servicoTomadoImpostoAliquota" className={labelClasses}>Alíquota (%)</label>
+                    <input
+                      id="servicoTomadoImpostoAliquota"
+                      type="text"
+                      inputMode="decimal"
+                      value={servicoTomadoImpostoAliquota}
+                      onChange={(e) => setServicoTomadoImpostoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                      placeholder="Ex.: 0,65"
+                      className={inputClasses}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Esses valores não entram no Total de Impostos Apurados nem na Carga Tributária Efetiva, por enquanto.
+            </p>
+          </Secao>
+
           <Secao titulo="Planejamento e Economia Tributária">
             <div className="grid gap-4 sm:grid-cols-3">
               <CampoMoeda id="cenario" rotulo="Cenário sem otimização (R$)" centavos={cenario} onChange={setCenario} />
@@ -714,7 +935,7 @@ export default function LancamentosModal({
             </div>
           </Secao>
 
-          <Secao titulo="Remuneração dos Sócios">
+          <Secao titulo="Distribuição de Lucros">
             {socios.length === 0 ? (
               <p className="text-sm text-slate-400">Esta empresa não tem sócios cadastrados.</p>
             ) : (
@@ -728,21 +949,103 @@ export default function LancamentosModal({
                       </span>
                     </div>
                     <CampoMoeda
-                      id={`pro-${s.id}`}
-                      rotulo="Pró-labore do mês (R$)"
-                      centavos={remuneracao[s.id]?.proLabore ?? 0}
-                      onChange={(c) => setRem(s.id, 'proLabore', c)}
-                    />
-                    <CampoMoeda
                       id={`dist-${s.id}`}
-                      rotulo="Distribuição de lucros (R$)"
+                      rotulo="Distribuição de Lucros (R$)"
                       centavos={remuneracao[s.id]?.distribuicao ?? 0}
                       onChange={(c) => setRem(s.id, 'distribuicao', c)}
+                    />
+                    <CampoMoeda
+                      id={`trib-${s.id}`}
+                      rotulo="Tributos (R$)"
+                      centavos={remuneracao[s.id]?.tributos ?? 0}
+                      onChange={(c) => setRem(s.id, 'tributos', c)}
                     />
                   </div>
                 ))}
               </div>
             )}
+          </Secao>
+
+          <Secao titulo="Folha de Pagamento">
+            <div className="grid gap-3">
+              {folha.map((p, i) => (
+                <div
+                  key={i}
+                  className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-[1fr_1.4fr_1fr_1fr]"
+                >
+                  <div>
+                    <label htmlFor={`folha-tipo-${i}`} className={labelClasses}>Tipo</label>
+                    <select
+                      id={`folha-tipo-${i}`}
+                      value={p.tipo}
+                      onChange={(e) => {
+                        const tipo = e.target.value as 'socio' | 'colaborador';
+                        setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, tipo, nome: '' } : x)));
+                      }}
+                      className={inputClasses}
+                    >
+                      <option value="socio">Sócio</option>
+                      <option value="colaborador">Colaborador</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`folha-nome-${i}`} className={labelClasses}>Nome</label>
+                    {p.tipo === 'socio' ? (
+                      <select
+                        id={`folha-nome-${i}`}
+                        value={p.nome}
+                        onChange={(e) =>
+                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
+                        }
+                        className={inputClasses}
+                      >
+                        <option value="">Selecione...</option>
+                        {socios.map((s) => (
+                          <option key={s.id} value={s.nome}>{s.nome}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={`folha-nome-${i}`}
+                        type="text"
+                        value={p.nome}
+                        onChange={(e) =>
+                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
+                        }
+                        placeholder="Nome do colaborador"
+                        className={inputClasses}
+                      />
+                    )}
+                  </div>
+                  <CampoMoeda
+                    id={`folha-valor-${i}`}
+                    rotulo="Valor (R$)"
+                    centavos={p.valor}
+                    onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, valor: c } : x)))}
+                  />
+                  <CampoMoeda
+                    id={`folha-tributos-${i}`}
+                    rotulo="Tributos (R$)"
+                    centavos={p.tributos}
+                    onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, tributos: c } : x)))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFolha((prev) => prev.filter((_, j) => j !== i))}
+                    className="justify-self-start text-xs text-slate-400 hover:text-red-300 sm:col-span-4"
+                  >
+                    Remover pessoa
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setFolha((prev) => [...prev, { nome: '', tipo: 'socio', valor: 0, tributos: 0 }])}
+                className={`${ghostButtonClasses} justify-self-start px-3 py-1.5 rounded-lg text-sm`}
+              >
+                + Adicionar pessoa
+              </button>
+            </div>
           </Secao>
 
           <Secao titulo="Ações Realizadas no Mês">

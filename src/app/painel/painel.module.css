@@ -346,6 +346,19 @@
   flex: none;
 }
 
+.nfGrupoRotulo {
+  margin: 14px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.nfGrupoRotulo:first-of-type {
+  margin-top: 4px;
+}
+
 .nfs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -481,11 +494,30 @@
   color: #ffffff;
 }
 
+/* Separa visualmente os impostos mensais dos trimestrais */
+.inicioTrimestrais td {
+  border-top: 2px solid rgba(216, 179, 98, 0.55);
+}
+
 .detalheEncargo {
   margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
   color: #f59e0b;
+}
+
+.tagTrimestral {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  vertical-align: middle;
 }
 
 .pct {

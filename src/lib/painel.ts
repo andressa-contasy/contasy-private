@@ -29,6 +29,7 @@ export type ImpostoLinha = {
   aliquota: number | null;
   juros: number;
   multa: number;
+  periodicidade: 'mensal' | 'trimestral';
 };
 
 export type LancamentoCompleto = {
@@ -40,6 +41,10 @@ export type LancamentoCompleto = {
   nfeValor: number;
   nfseQtd: number;
   nfseValor: number;
+  // Notas de entrada: só registram quantidade (sem valor), para controle contábil — não
+  // entram na Receita nem na alíquota efetiva
+  entradaProdutoQtd: number;
+  entradaServicoQtd: number;
   impostos: ImpostoLinha[];
   totalImpostos: number;
   remuneracao: { socioId: string; proLabore: number; distribuicao: number }[];
@@ -78,6 +83,23 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
   if (emp.error) throw new Error(`Empresa não encontrada: ${emp.error.message}`);
   if (soc.error) throw new Error(`Erro ao carregar sócios: ${soc.error.message}`);
   if (fin.error) throw new Error(`Erro ao carregar lançamentos: ${fin.error.message}`);
+
+  // Periodicidade de cada imposto, conforme o regime da empresa (para marcar os trimestrais
+  // na composição do relatório). Se o regime mudou ao longo do tempo, isso reflete o regime
+  // atual — é só uma marcação visual, não afeta nenhum cálculo.
+  const periodicidadePorCodigo = new Map<string, 'mensal' | 'trimestral'>();
+  if (emp.data?.regime_tributario) {
+    const { data: regimeImp } = await supabase
+      .from('regimes_impostos')
+      .select('periodicidade, tipos_imposto(codigo)')
+      .eq('regime', emp.data.regime_tributario);
+    for (const r of (regimeImp ?? []) as unknown as Array<{
+      periodicidade: 'mensal' | 'trimestral';
+      tipos_imposto: { codigo: string };
+    }>) {
+      periodicidadePorCodigo.set(r.tipos_imposto.codigo, r.periodicidade);
+    }
+  }
 
   const financeiro = fin.data ?? [];
   const ids: string[] = financeiro.map((l) => l.id);
@@ -118,6 +140,7 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
         aliquota: i.aliquota === null ? null : Number(i.aliquota),
         juros: emCentavos(i.juros),
         multa: emCentavos(i.multa),
+        periodicidade: periodicidadePorCodigo.get(i.tipos_imposto.codigo) ?? 'mensal',
       }));
     return {
       id: l.id,
@@ -128,6 +151,8 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
       nfeValor: emCentavos(l.nfe_produto_valor),
       nfseQtd: l.nfse_servico_qtd,
       nfseValor: emCentavos(l.nfse_servico_valor),
+      entradaProdutoQtd: l.entrada_produto_qtd ?? 0,
+      entradaServicoQtd: l.entrada_servico_qtd ?? 0,
       impostos,
       // Total pago por imposto = valor + juros + multa
       totalImpostos: impostos.reduce((t, i) => t + i.valor + i.juros + i.multa, 0),
@@ -186,6 +211,8 @@ export type ResultadoPainel = {
   economiaAno: number;
   nfe: { qtd: number; valor: number };
   nfse: { qtd: number; valor: number };
+  entradaProduto: { qtd: number };
+  entradaServico: { qtd: number };
   totalNfs: number;
   // aliquota: a digitada; 'variavel' = mudou entre os meses do período; null = não informada
   // valor: só o imposto (principal); juros/multa: encargos por atraso, somados à parte
@@ -196,6 +223,7 @@ export type ResultadoPainel = {
     juros: number;
     multa: number;
     aliquota: number | 'variavel' | null;
+    periodicidade: 'mensal' | 'trimestral';
   }[];
   socios: { id: string; nome: string; ordem: number; proLabore: number; distribuicao: number }[];
   acoes: { mes: string; titulo: string; descricao: string }[];
@@ -231,6 +259,7 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
       juros: number;
       multa: number;
       aliquotas: (number | null)[];
+      periodicidade: 'mensal' | 'trimestral';
     }
   >();
   for (const l of atuais) {
@@ -250,20 +279,51 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
           juros: i.juros,
           multa: i.multa,
           aliquotas: [i.aliquota],
+          periodicidade: i.periodicidade,
         });
       }
     }
   }
-  const impostos = [...porImposto.values()]
+  let impostos = [...porImposto.values()]
     .filter((i) => i.valor > 0 || i.juros > 0 || i.multa > 0)
-    .sort((a, b) => a.ordem - b.ordem)
+    // Mensais primeiro, trimestrais no final (dentro de cada grupo, pela ordem do catálogo)
+    .sort((a, b) =>
+      a.periodicidade === b.periodicidade ? a.ordem - b.ordem : a.periodicidade === 'trimestral' ? 1 : -1,
+    )
     .map((i) => {
       const informadas = i.aliquotas.filter((a): a is number => a !== null);
       const distintas = new Set(informadas.map((a) => a.toFixed(4)));
       const aliquota =
         informadas.length < i.aliquotas.length ? null : distintas.size === 1 ? informadas[0] : ('variavel' as const);
-      return { codigo: i.codigo, nome: i.nome, valor: i.valor, juros: i.juros, multa: i.multa, aliquota };
+      return {
+        codigo: i.codigo,
+        nome: i.nome,
+        valor: i.valor,
+        juros: i.juros,
+        multa: i.multa,
+        aliquota,
+        periodicidade: i.periodicidade,
+      };
     });
+
+  // No Simples Nacional, o relatório do cliente mostra uma guia só ("Guia PGDAS"), mesmo que
+  // o período tenha meses antigos lançados ainda com os impostos detalhados (PIS, COFINS...),
+  // de antes da simplificação do regime. O histórico em si não muda, só a soma mostrada aqui.
+  if (dados.empresa.regime_tributario === 'simples_nacional' && impostos.length > 0) {
+    impostos = [
+      {
+        codigo: 'PGDAS',
+        nome: 'Guia PGDAS',
+        valor: impostos.reduce((t, i) => t + i.valor, 0),
+        juros: impostos.reduce((t, i) => t + i.juros, 0),
+        multa: impostos.reduce((t, i) => t + i.multa, 0),
+        // Só reaproveita a alíquota quando o período só tem esse único código (o caso normal
+        // daqui pra frente); misturado com impostos antigos, não há uma taxa única válida.
+        aliquota: impostos.length === 1 ? impostos[0].aliquota : null,
+        periodicidade: 'mensal',
+      },
+    ];
+  }
 
   // Pró-labore e distribuição de lucros ficam sempre separados. Com mais de um mês
   // selecionado, cada um soma o período (não há acumulado do ano por sócio).
@@ -297,7 +357,9 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
     economiaAno: noAno.filter((l) => l.cenario > 0).reduce((t, l) => t + (l.cenario - l.totalImpostos), 0),
     nfe: { qtd: soma(atuais, (l) => l.nfeQtd), valor: soma(atuais, (l) => l.nfeValor) },
     nfse: { qtd: soma(atuais, (l) => l.nfseQtd), valor: soma(atuais, (l) => l.nfseValor) },
-    totalNfs: soma(atuais, (l) => l.nfeQtd + l.nfseQtd),
+    entradaProduto: { qtd: soma(atuais, (l) => l.entradaProdutoQtd) },
+    entradaServico: { qtd: soma(atuais, (l) => l.entradaServicoQtd) },
+    totalNfs: soma(atuais, (l) => l.nfeQtd + l.nfseQtd + l.entradaProdutoQtd + l.entradaServicoQtd),
     impostos,
     socios,
     acoes: atuais.flatMap((l) => l.acoes.map((a) => ({ mes: l.mes, ...a }))),
