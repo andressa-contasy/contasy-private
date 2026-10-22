@@ -45,9 +45,16 @@ export type LancamentoCompleto = {
   // entram na Receita nem na alíquota efetiva
   entradaProdutoQtd: number;
   entradaServicoQtd: number;
+  // Impostos sobre NF de entrada/serviços tomados: não entram no Total de Impostos
+  // Apurados nem na Carga Tributária Efetiva, por enquanto
+  entradaImpostoValor: number;
+  entradaImpostoAliquota: number | null;
+  servicoTomadoImpostoValor: number;
+  servicoTomadoImpostoAliquota: number | null;
   impostos: ImpostoLinha[];
   totalImpostos: number;
-  remuneracao: { socioId: string; proLabore: number; distribuicao: number }[];
+  remuneracao: { socioId: string; distribuicao: number; tributos: number }[];
+  folha: { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }[];
   acoes: { titulo: string; descricao: string }[];
 };
 
@@ -105,7 +112,7 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
   const ids: string[] = financeiro.map((l) => l.id);
 
   const vazio = { data: [], error: null };
-  const [imp, rem, aco] = ids.length
+  const [imp, rem, aco, fol] = ids.length
     ? await Promise.all([
         supabase
           .from('lancamento_impostos')
@@ -113,13 +120,14 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
           .in('lancamento_id', ids),
         supabase
           .from('remuneracao_socios')
-          .select('lancamento_id, socio_id, pro_labore, distribuicao_lucros')
+          .select('lancamento_id, socio_id, distribuicao_lucros, tributos')
           .in('lancamento_id', ids),
         supabase.from('acoes_mes').select('lancamento_id, titulo, descricao, ordem').in('lancamento_id', ids).order('ordem'),
+        supabase.from('folha_pagamento').select('lancamento_id, nome, tipo, valor, tributos').in('lancamento_id', ids),
       ])
-    : [vazio, vazio, vazio];
+    : [vazio, vazio, vazio, vazio];
 
-  const falha = imp.error ?? rem.error ?? aco.error;
+  const falha = imp.error ?? rem.error ?? aco.error ?? fol.error;
   if (falha) throw new Error(`Erro ao carregar detalhes dos lançamentos: ${falha.message}`);
 
   const impostosPor = (imp.data ?? []) as unknown as Array<{
@@ -153,6 +161,11 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
       nfseValor: emCentavos(l.nfse_servico_valor),
       entradaProdutoQtd: l.entrada_produto_qtd ?? 0,
       entradaServicoQtd: l.entrada_servico_qtd ?? 0,
+      entradaImpostoValor: emCentavos(l.entrada_imposto_valor),
+      entradaImpostoAliquota: l.entrada_imposto_aliquota === null ? null : Number(l.entrada_imposto_aliquota),
+      servicoTomadoImpostoValor: emCentavos(l.servico_tomado_imposto_valor),
+      servicoTomadoImpostoAliquota:
+        l.servico_tomado_imposto_aliquota === null ? null : Number(l.servico_tomado_imposto_aliquota),
       impostos,
       // Total pago por imposto = valor + juros + multa
       totalImpostos: impostos.reduce((t, i) => t + i.valor + i.juros + i.multa, 0),
@@ -160,8 +173,16 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
         .filter((r) => r.lancamento_id === l.id)
         .map((r) => ({
           socioId: r.socio_id,
-          proLabore: emCentavos(r.pro_labore),
           distribuicao: emCentavos(r.distribuicao_lucros),
+          tributos: emCentavos(r.tributos),
+        })),
+      folha: (fol.data ?? [])
+        .filter((p) => p.lancamento_id === l.id)
+        .map((p) => ({
+          nome: p.nome as string,
+          tipo: p.tipo as 'socio' | 'colaborador',
+          valor: emCentavos(p.valor),
+          tributos: emCentavos(p.tributos),
         })),
       acoes: (aco.data ?? [])
         .filter((a) => a.lancamento_id === l.id)
@@ -214,6 +235,10 @@ export type ResultadoPainel = {
   entradaProduto: { qtd: number };
   entradaServico: { qtd: number };
   totalNfs: number;
+  // Impostos sobre NF de entrada/serviços tomados: não entram no totalImpostos/carga, por
+  // enquanto. aliquota segue a mesma regra dos demais: nunca calculada, só a digitada.
+  entradaImposto: { valor: number; aliquota: number | 'variavel' | null };
+  servicoTomadoImposto: { valor: number; aliquota: number | 'variavel' | null };
   // aliquota: a digitada; 'variavel' = mudou entre os meses do período; null = não informada
   // valor: só o imposto (principal); juros/multa: encargos por atraso, somados à parte
   impostos: {
@@ -225,7 +250,8 @@ export type ResultadoPainel = {
     aliquota: number | 'variavel' | null;
     periodicidade: 'mensal' | 'trimestral';
   }[];
-  socios: { id: string; nome: string; ordem: number; proLabore: number; distribuicao: number }[];
+  socios: { id: string; nome: string; ordem: number; distribuicao: number; tributos: number }[];
+  folha: { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }[];
   acoes: { mes: string; titulo: string; descricao: string }[];
   evolucao: { mes: string; carga: number }[];
 };
@@ -325,18 +351,51 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
     ];
   }
 
-  // Pró-labore e distribuição de lucros ficam sempre separados. Com mais de um mês
-  // selecionado, cada um soma o período (não há acumulado do ano por sócio).
+  // Com mais de um mês selecionado, cada sócio soma o período (não há acumulado do ano).
   const socios = dados.socios.map((s) => {
     const doPeriodo = atuais.flatMap((l) => l.remuneracao).filter((r) => r.socioId === s.id);
     return {
       id: s.id,
       nome: s.nome,
       ordem: s.ordem,
-      proLabore: doPeriodo.reduce((t, r) => t + r.proLabore, 0),
       distribuicao: doPeriodo.reduce((t, r) => t + r.distribuicao, 0),
+      tributos: doPeriodo.reduce((t, r) => t + r.tributos, 0),
     };
   });
+
+  // Folha de pagamento: soma por pessoa (nome + tipo) ao longo do período selecionado.
+  const folhaPorPessoa = new Map<string, { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }>();
+  for (const l of atuais) {
+    for (const p of l.folha) {
+      const chave = `${p.tipo}:${p.nome}`;
+      const atual = folhaPorPessoa.get(chave);
+      if (atual) {
+        atual.valor += p.valor;
+        atual.tributos += p.tributos;
+      } else {
+        folhaPorPessoa.set(chave, { ...p });
+      }
+    }
+  }
+  const folha = [...folhaPorPessoa.values()].sort((a, b) =>
+    a.tipo === b.tipo ? a.nome.localeCompare(b.nome) : a.tipo === 'socio' ? -1 : 1,
+  );
+
+  // Alíquota de um imposto sobre NF de entrada/serviços tomados, somada pelo período: só
+  // considera os meses em que houve valor lançado, e nunca calcula — só reaproveita a
+  // digitada (null se faltar em algum desses meses; 'variavel' se os meses digitados diferirem).
+  const aliquotaEntradaPeriodo = (
+    valorCampo: (l: LancamentoCompleto) => number,
+    aliquotaCampo: (l: LancamentoCompleto) => number | null,
+  ): number | 'variavel' | null => {
+    const relevantes = atuais.filter((l) => valorCampo(l) > 0);
+    if (relevantes.length === 0) return null;
+    const aliquotas = relevantes.map(aliquotaCampo);
+    const informadas = aliquotas.filter((a): a is number => a !== null);
+    if (informadas.length < aliquotas.length) return null;
+    const distintas = new Set(informadas.map((a) => a.toFixed(4)));
+    return distintas.size === 1 ? informadas[0] : 'variavel';
+  };
 
   // Evolução da carga: últimos 6 meses até o fim do período (ou o período todo, se for maior)
   const inicioEvolucao = meses > 6 ? de : deslocarMes(ate, -5);
@@ -360,8 +419,17 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
     entradaProduto: { qtd: soma(atuais, (l) => l.entradaProdutoQtd) },
     entradaServico: { qtd: soma(atuais, (l) => l.entradaServicoQtd) },
     totalNfs: soma(atuais, (l) => l.nfeQtd + l.nfseQtd + l.entradaProdutoQtd + l.entradaServicoQtd),
+    entradaImposto: {
+      valor: soma(atuais, (l) => l.entradaImpostoValor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.entradaImpostoValor, (l) => l.entradaImpostoAliquota),
+    },
+    servicoTomadoImposto: {
+      valor: soma(atuais, (l) => l.servicoTomadoImpostoValor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.servicoTomadoImpostoValor, (l) => l.servicoTomadoImpostoAliquota),
+    },
     impostos,
     socios,
+    folha,
     acoes: atuais.flatMap((l) => l.acoes.map((a) => ({ mes: l.mes, ...a }))),
     evolucao,
   };

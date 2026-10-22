@@ -12,6 +12,7 @@ import {
   ScrollText,
   TrendingUp,
   UserCheck,
+  Users,
   Wallet,
 } from 'lucide-react';
 import { brl, pct } from '../../lib/formatacao';
@@ -232,7 +233,7 @@ export default function PainelCliente({
 
             <section className={styles.card}>
               <h2 className={styles.cardTitulo}>
-                <Wallet size={18} /> Remuneração dos Sócios
+                <Wallet size={18} /> Distribuição de Lucros
               </h2>
               {r.socios.length > 0 ? (
                 <div className={styles.socios}>
@@ -242,12 +243,12 @@ export default function PainelCliente({
                         {s.nome} (Sócio {String(i + 1).padStart(2, '0')})
                       </div>
                       <div className={styles.socioLinha}>
-                        <span>Pró-labore {periodoTexto}:</span>
-                        <strong>{moeda(s.proLabore)}</strong>
-                      </div>
-                      <div className={styles.socioLinha}>
                         <span>Distribuição de Lucros:</span>
                         <strong className={styles.verde}>{moeda(s.distribuicao)}</strong>
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Tributos:</span>
+                        <strong>{moeda(s.tributos)}</strong>
                       </div>
                     </div>
                   ))}
@@ -289,12 +290,54 @@ export default function PainelCliente({
                 <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
                   <div className={styles.nfRotulo}>NF-e (Produto)</div>
                   <div className={styles.nfQtd}>{inteiro.format(r.entradaProduto.qtd)} NFs</div>
+                  {r.entradaImposto.valor > 0 && (
+                    <div className={styles.nfValor}>
+                      Imposto: {moeda(r.entradaImposto.valor)}
+                      {r.entradaImposto.aliquota !== null &&
+                        ` · ${r.entradaImposto.aliquota === 'variavel' ? 'Variável' : `${pct.format(r.entradaImposto.aliquota)}%`}`}
+                    </div>
+                  )}
                 </div>
                 <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
                   <div className={styles.nfRotulo}>NFS-e (Serviço)</div>
                   <div className={styles.nfQtd}>{inteiro.format(r.entradaServico.qtd)} NFs</div>
+                  {r.servicoTomadoImposto.valor > 0 && (
+                    <div className={styles.nfValor}>
+                      Imposto: {moeda(r.servicoTomadoImposto.valor)}
+                      {r.servicoTomadoImposto.aliquota !== null &&
+                        ` · ${r.servicoTomadoImposto.aliquota === 'variavel' ? 'Variável' : `${pct.format(r.servicoTomadoImposto.aliquota)}%`}`}
+                    </div>
+                  )}
                 </div>
               </div>
+            </section>
+
+            <section className={styles.card}>
+              <h2 className={styles.cardTitulo}>
+                <Users size={18} /> Folha de Pagamento
+              </h2>
+              {r.folha.length > 0 ? (
+                <div className={styles.socios}>
+                  {r.folha.map((p, i) => (
+                    <div key={`${p.tipo}-${p.nome}-${i}`} className={`${styles.caixaInterna} ${styles.socio}`}>
+                      <div className={styles.socioNome}>
+                        {p.nome}
+                        <span className={styles.tagTrimestral}>{p.tipo === 'socio' ? 'Sócio' : 'Colaborador'}</span>
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Valor {periodoTexto}:</span>
+                        <strong>{moeda(p.valor)}</strong>
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Tributos:</span>
+                        <strong>{moeda(p.tributos)}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={styles.vazio}>Nenhum lançamento de folha no período.</p>
+              )}
             </section>
 
             <section className={styles.card}>
