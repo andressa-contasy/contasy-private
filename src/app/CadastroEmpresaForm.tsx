@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { PORTES, REGIMES } from '../lib/formatacao';
+import { PORTES, REGIMES, mascararCpf } from '../lib/formatacao';
 import { cardClasses, ghostButtonClasses, goldButtonClasses, inputClasses, labelClasses } from '../lib/estilos';
 
 type Contador = { id: string; nome: string; crc: string };
-type SocioForm = { nome: string; cota: string };
+type SocioForm = { nome: string; cota: string; cpf: string };
 
 // Aplica a máscara XX.XXX.XXX/XXXX-XX enquanto o usuário digita.
 // CNPJ alfanumérico: as 12 primeiras posições aceitam letras e números,
@@ -42,7 +42,7 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
   const [salvandoContador, setSalvandoContador] = useState(false);
 
   const [qtdTexto, setQtdTexto] = useState('1');
-  const [socios, setSocios] = useState<SocioForm[]>([{ nome: '', cota: '100' }]);
+  const [socios, setSocios] = useState<SocioForm[]>([{ nome: '', cota: '100', cpf: '' }]);
 
   const [aberto, setAberto] = useState(false); // recolhido por padrão
   const [salvando, setSalvando] = useState(false);
@@ -75,7 +75,7 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
     const n = parseInt(texto, 10);
     if (!Number.isInteger(n) || n < 1 || n > 20) return;
     setSocios((prev) =>
-      Array.from({ length: n }, (_, i) => prev[i] ?? { nome: '', cota: n === 1 ? '100' : '' }),
+      Array.from({ length: n }, (_, i) => prev[i] ?? { nome: '', cota: n === 1 ? '100' : '', cpf: '' }),
     );
   }
 
@@ -165,6 +165,7 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
         empresa_id: empresa.id,
         nome: s.nome.trim(),
         cota_percentual: cotaEmCentesimos(s.cota) / 100,
+        cpf: s.cpf.replace(/\D/g, '') || null,
         ordem: i + 1,
       })),
     );
@@ -183,7 +184,7 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
     setRegimeAnterior('');
     setPorte('');
     setQtdTexto('1');
-    setSocios([{ nome: '', cota: '100' }]);
+    setSocios([{ nome: '', cota: '100', cpf: '' }]);
     setSucesso(true);
     setAberto(false); // recolhe o formulário e deixa só a confirmação visível
     setSalvando(false);
@@ -364,7 +365,7 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
 
           <div className="grid gap-3">
             {socios.map((s, i) => (
-              <div key={i} className="grid gap-3 sm:grid-cols-[3fr_1fr]">
+              <div key={i} className="grid gap-3 sm:grid-cols-[2.4fr_1fr_1.6fr]">
                 <div>
                   <label htmlFor={`socio-nome-${i}`} className={labelClasses}>Sócio {String(i + 1).padStart(2, '0')}</label>
                   <input
@@ -390,9 +391,26 @@ export default function CadastroEmpresaForm({ onCadastrada }: { onCadastrada: ()
                     className={inputClasses}
                   />
                 </div>
+                <div>
+                  <label htmlFor={`socio-cpf-${i}`} className={labelClasses}>CPF (opcional)</label>
+                  <input
+                    id={`socio-cpf-${i}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={14}
+                    value={s.cpf}
+                    onChange={(e) => alterarSocio(i, 'cpf', mascararCpf(e.target.value))}
+                    placeholder="000.000.000-00"
+                    className={inputClasses}
+                  />
+                </div>
               </div>
             ))}
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            O CPF é usado só para puxar automaticamente o vencimento do certificado digital (e-CPF) do sócio no
+            relatório do cliente. Pode ficar em branco e ser preenchido depois.
+          </p>
         </div>
 
         <div className="md:col-span-6">

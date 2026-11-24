@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { brl, pct, somarAliquotas } from '../../../lib/formatacao';
+import { brl, pct, somarAliquotas, mesAtual } from '../../../lib/formatacao';
 import { calcularPainel, carregarDados, contarMeses, deslocarMes, rotuloMes } from '../../../lib/painel';
 import type { DadosEmpresa } from '../../../lib/painel';
 import { goldButtonClasses, ghostButtonClasses } from '../../../lib/estilos';
@@ -64,7 +64,12 @@ export default function ConsultaEmpresaPage() {
     recarregar();
   }, [recarregar]);
 
-  const mesesDisponiveis = useMemo(() => (dados ? dados.lancamentos.map((l) => l.mes).reverse() : []), [dados]);
+  // Empresa sem nenhum lançamento ainda: usa o mês atual como período padrão, só para o
+  // painel poder abrir zerado (e mostrar ao menos o certificado digital e os sócios).
+  const mesesDisponiveis = useMemo(
+    () => (dados ? (dados.lancamentos.length ? dados.lancamentos.map((l) => l.mes).reverse() : [mesAtual()]) : []),
+    [dados],
+  );
   const maisRecente = mesesDisponiveis[0];
 
   // Período efetivo (de, ate) a partir da seleção
@@ -262,21 +267,24 @@ export default function ConsultaEmpresaPage() {
 
       {carregando && <p className="p-8 text-center text-slate-500">Carregando...</p>}
 
-      {dados && dados.lancamentos.length === 0 && !carregando && (
-        <div className="mx-auto mt-8 max-w-[640px] rounded-2xl border border-[#d8b362]/30 bg-[#0f172a]/80 p-8 text-center">
-          <p className="text-lg font-semibold text-white">Nenhum lançamento para {dados.empresa.nome_empresa}.</p>
-          <p className="mt-2 text-sm text-slate-400">Lance os dados do primeiro mês para montar o painel.</p>
-          <button
-            type="button"
-            onClick={() => setModalAberto(true)}
-            className={`${goldButtonClasses} mt-5 rounded-lg px-5 py-2`}
-          >
-            Lançar Dados
-          </button>
+      {dados && dados.lancamentos.length === 0 && !carregando && aba === 'painel' && (
+        <div className="mx-auto mt-4 max-w-[1240px] px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d8b362]/30 bg-[#0f172a]/80 p-4">
+            <p className="text-sm text-slate-300">
+              Nenhum lançamento para {dados.empresa.nome_empresa} ainda — o painel abaixo está zerado.
+            </p>
+            <button
+              type="button"
+              onClick={() => setModalAberto(true)}
+              className={`${goldButtonClasses} rounded-lg px-4 py-1.5 text-sm`}
+            >
+              Lançar Dados
+            </button>
+          </div>
         </div>
       )}
 
-      {dados && resultado && dados.lancamentos.length > 0 && aba === 'painel' && (
+      {dados && resultado && aba === 'painel' && (
         <div className="overflow-x-auto">
           <PainelCliente
             dados={dados}
@@ -285,6 +293,12 @@ export default function ConsultaEmpresaPage() {
             exportando={exportando}
             painelRef={painelRef}
           />
+        </div>
+      )}
+
+      {dados && dados.lancamentos.length === 0 && !carregando && aba === 'historico' && (
+        <div className="mx-auto mt-6 max-w-[1240px] px-6 pb-12">
+          <p className="text-sm text-slate-500">Nenhum lançamento para {dados.empresa.nome_empresa} ainda.</p>
         </div>
       )}
 

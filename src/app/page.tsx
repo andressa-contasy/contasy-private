@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-import { rotuloPorte, rotuloRegime } from '../lib/formatacao';
+import { rotuloPorte, rotuloRegime, rotuloStatusCliente } from '../lib/formatacao';
 import { cardClasses, ghostButtonClasses, goldButtonClasses } from '../lib/estilos';
 import CadastroEmpresaForm from './CadastroEmpresaForm';
 import LancamentosModal from './LancamentosModal';
+import SociosModal from './SociosModal';
 import ContaBotoes from './ContaBotoes';
 
 type Empresa = {
@@ -16,6 +17,14 @@ type Empresa = {
   cnpj: string | null;
   regime_tributario: string | null;
   porte: string | null;
+  status_cliente: string | null;
+};
+
+const CORES_STATUS_CLIENTE: Record<string, string> = {
+  ativa_mensal: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+  ativa_parceria: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+  inadimplente: 'text-red-300 bg-red-500/15 border-red-500/30',
+  em_migracao: 'text-amber-300 bg-amber-500/15 border-amber-500/30',
 };
 
 export default function DashboardPage() {
@@ -23,6 +32,7 @@ export default function DashboardPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [empresaLancamentos, setEmpresaLancamentos] = useState<Empresa | null>(null);
+  const [empresaSocios, setEmpresaSocios] = useState<Empresa | null>(null);
 
   // Busca a lista de empresas cadastradas no Supabase
   const carregarEmpresas = useCallback(async () => {
@@ -117,8 +127,13 @@ export default function DashboardPage() {
                       <td className="py-3 px-4 text-slate-300">{rotuloRegime(empresa.regime_tributario)}</td>
                       <td className="py-3 px-4 text-slate-300">{rotuloPorte(empresa.porte)}</td>
                       <td className="py-3 px-4">
-                        <span className="inline-block px-2 py-1 text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 rounded-full">
-                          Ativo
+                        <span
+                          className={`inline-block px-2 py-1 text-xs font-semibold border rounded-full ${
+                            CORES_STATUS_CLIENTE[empresa.status_cliente ?? ''] ??
+                            'text-slate-400 bg-white/5 border-white/10'
+                          }`}
+                        >
+                          {rotuloStatusCliente(empresa.status_cliente)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
@@ -128,6 +143,13 @@ export default function DashboardPage() {
                         >
                           Consultar
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => setEmpresaSocios(empresa)}
+                          className={`${ghostButtonClasses} text-sm px-3 py-1.5 rounded-lg mr-2`}
+                        >
+                          Sócios
+                        </button>
                         <button
                           type="button"
                           onClick={() => setEmpresaLancamentos(empresa)}
@@ -157,6 +179,8 @@ export default function DashboardPage() {
           onClose={() => setEmpresaLancamentos(null)}
         />
       )}
+
+      {empresaSocios && <SociosModal empresa={empresaSocios} onClose={() => setEmpresaSocios(null)} />}
     </main>
   );
 }

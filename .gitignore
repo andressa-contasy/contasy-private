@@ -16,3 +16,6 @@ Thumbs.db
 *.log
 .vscode/
 .vercel
+
+# arquivos instalados localmente por skills do Claude Code (não é código do app)
+.claude/

@@ -19,6 +19,7 @@ import { brl, pct } from '../../lib/formatacao';
 import { rotuloMes } from '../../lib/painel';
 import type { DadosEmpresa, ResultadoPainel } from '../../lib/painel';
 import EvolucaoChart from './EvolucaoChart';
+import CertificadosCard from './CertificadosCard';
 import styles from './painel.module.css';
 
 const fonte = Plus_Jakarta_Sans({
@@ -39,6 +40,24 @@ function iniciais(nome: string) {
     .slice(0, 2)
     .map((p) => p[0].toUpperCase())
     .join('');
+}
+
+// Linha de imposto sobre NF de entrada/serviços tomados (só aparece se houver valor lançado)
+function ImpostoEntradaLinha({
+  rotulo,
+  imposto,
+}: {
+  rotulo: string;
+  imposto: { valor: number; aliquota: number | 'variavel' | null };
+}) {
+  if (imposto.valor <= 0) return null;
+  return (
+    <div className={styles.nfValor}>
+      {rotulo}: {moeda(imposto.valor)}
+      {imposto.aliquota !== null &&
+        ` · ${imposto.aliquota === 'variavel' ? 'Variável' : `${pct.format(imposto.aliquota)}%`}`}
+    </div>
+  );
 }
 
 export default function PainelCliente({
@@ -290,27 +309,19 @@ export default function PainelCliente({
                 <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
                   <div className={styles.nfRotulo}>NF-e (Produto)</div>
                   <div className={styles.nfQtd}>{inteiro.format(r.entradaProduto.qtd)} NFs</div>
-                  {r.entradaImposto.valor > 0 && (
-                    <div className={styles.nfValor}>
-                      Imposto: {moeda(r.entradaImposto.valor)}
-                      {r.entradaImposto.aliquota !== null &&
-                        ` · ${r.entradaImposto.aliquota === 'variavel' ? 'Variável' : `${pct.format(r.entradaImposto.aliquota)}%`}`}
-                    </div>
-                  )}
+                  <ImpostoEntradaLinha rotulo="ICMS Difal" imposto={r.icmsDifal} />
                 </div>
                 <div className={`${styles.caixaInterna} ${styles.nfCaixa}`}>
                   <div className={styles.nfRotulo}>NFS-e (Serviço)</div>
                   <div className={styles.nfQtd}>{inteiro.format(r.entradaServico.qtd)} NFs</div>
-                  {r.servicoTomadoImposto.valor > 0 && (
-                    <div className={styles.nfValor}>
-                      Imposto: {moeda(r.servicoTomadoImposto.valor)}
-                      {r.servicoTomadoImposto.aliquota !== null &&
-                        ` · ${r.servicoTomadoImposto.aliquota === 'variavel' ? 'Variável' : `${pct.format(r.servicoTomadoImposto.aliquota)}%`}`}
-                    </div>
-                  )}
+                  <ImpostoEntradaLinha rotulo="IRRF" imposto={r.irrfServicoTomado} />
+                  <ImpostoEntradaLinha rotulo="CSRF" imposto={r.csrf} />
+                  <ImpostoEntradaLinha rotulo="ISS Retido" imposto={r.issRetido} />
                 </div>
               </div>
             </section>
+
+            <CertificadosCard cnpj={empresa.cnpj} socios={cadastroSocios} />
 
             <section className={styles.card}>
               <h2 className={styles.cardTitulo}>
@@ -328,9 +339,19 @@ export default function PainelCliente({
                         <span>Valor {periodoTexto}:</span>
                         <strong>{moeda(p.valor)}</strong>
                       </div>
+                      {empresa.regime_tributario === 'lucro_presumido' && (
+                        <div className={styles.socioLinha}>
+                          <span>Valor Líquido do Funcionário:</span>
+                          <strong>{moeda(p.valorLiquido)}</strong>
+                        </div>
+                      )}
                       <div className={styles.socioLinha}>
-                        <span>Tributos:</span>
-                        <strong>{moeda(p.tributos)}</strong>
+                        <span>Guia FGTS:</span>
+                        <strong>{moeda(p.guiaFgts)}</strong>
+                      </div>
+                      <div className={styles.socioLinha}>
+                        <span>Guia DCTFWeb:</span>
+                        <strong>{moeda(p.guiaDctfweb)}</strong>
                       </div>
                     </div>
                   ))}

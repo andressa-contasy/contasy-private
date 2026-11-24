@@ -276,6 +276,11 @@
   font-weight: 700;
 }
 
+.alerta {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
 .destaque {
   color: #d8b362;
 }

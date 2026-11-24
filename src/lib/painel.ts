@@ -32,11 +32,14 @@ export type ImpostoLinha = {
   periodicidade: 'mensal' | 'trimestral';
 };
 
+// valor/aliquota de um imposto sobre Nota Fiscal de Entrada/Serviços Tomados: não entram no
+// Total de Impostos Apurados nem na Carga Tributária Efetiva, por enquanto
+type ImpostoEntradaServico = { valor: number; aliquota: number | null };
+
 export type LancamentoCompleto = {
   id: string;
   mes: string; // 'AAAA-MM'
   faturamento: number;
-  cenario: number;
   nfeQtd: number;
   nfeValor: number;
   nfseQtd: number;
@@ -45,20 +48,25 @@ export type LancamentoCompleto = {
   // entram na Receita nem na alíquota efetiva
   entradaProdutoQtd: number;
   entradaServicoQtd: number;
-  // Impostos sobre NF de entrada/serviços tomados: não entram no Total de Impostos
-  // Apurados nem na Carga Tributária Efetiva, por enquanto
-  entradaImpostoValor: number;
-  entradaImpostoAliquota: number | null;
-  servicoTomadoImpostoValor: number;
-  servicoTomadoImpostoAliquota: number | null;
+  icmsDifal: ImpostoEntradaServico;
+  irrfServicoTomado: ImpostoEntradaServico;
+  csrf: ImpostoEntradaServico;
+  issRetido: ImpostoEntradaServico;
   impostos: ImpostoLinha[];
   totalImpostos: number;
   remuneracao: { socioId: string; distribuicao: number; tributos: number }[];
-  folha: { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }[];
+  folha: {
+    nome: string;
+    tipo: 'socio' | 'colaborador';
+    valor: number;
+    valorLiquido: number;
+    guiaFgts: number;
+    guiaDctfweb: number;
+  }[];
   acoes: { titulo: string; descricao: string }[];
 };
 
-export type SocioPainel = { id: string; nome: string; cota: number; ordem: number };
+export type SocioPainel = { id: string; nome: string; cota: number; ordem: number; cpf: string | null };
 
 export type EmpresaPainel = {
   id: string;
@@ -83,7 +91,11 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
       .select('id, nome_empresa, cnpj, regime_tributario, regime_anterior, porte, contadores(nome, crc)')
       .eq('id', empresaId)
       .single(),
-    supabase.from('socios').select('id, nome, cota_percentual, ordem').eq('empresa_id', empresaId).order('ordem'),
+    supabase
+      .from('socios')
+      .select('id, nome, cota_percentual, ordem, cpf')
+      .eq('empresa_id', empresaId)
+      .order('ordem'),
     supabase.from('financeiro_empresas').select('*').eq('empresa_id', empresaId).order('mes_referencia'),
   ]);
 
@@ -123,7 +135,10 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
           .select('lancamento_id, socio_id, distribuicao_lucros, tributos')
           .in('lancamento_id', ids),
         supabase.from('acoes_mes').select('lancamento_id, titulo, descricao, ordem').in('lancamento_id', ids).order('ordem'),
-        supabase.from('folha_pagamento').select('lancamento_id, nome, tipo, valor, tributos').in('lancamento_id', ids),
+        supabase
+          .from('folha_pagamento')
+          .select('lancamento_id, nome, tipo, valor, valor_liquido, guia_fgts, guia_dctfweb')
+          .in('lancamento_id', ids),
       ])
     : [vazio, vazio, vazio, vazio];
 
@@ -150,22 +165,25 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
         multa: emCentavos(i.multa),
         periodicidade: periodicidadePorCodigo.get(i.tipos_imposto.codigo) ?? 'mensal',
       }));
+    const impostoEntradaServico = (valor: number, aliquota: number | null): ImpostoEntradaServico => ({
+      valor: emCentavos(valor),
+      aliquota: aliquota === null ? null : Number(aliquota),
+    });
+
     return {
       id: l.id,
       mes: l.mes_referencia,
       faturamento: emCentavos(l.faturamento),
-      cenario: emCentavos(l.cenario_sem_otimizacao),
       nfeQtd: l.nfe_produto_qtd,
       nfeValor: emCentavos(l.nfe_produto_valor),
       nfseQtd: l.nfse_servico_qtd,
       nfseValor: emCentavos(l.nfse_servico_valor),
       entradaProdutoQtd: l.entrada_produto_qtd ?? 0,
       entradaServicoQtd: l.entrada_servico_qtd ?? 0,
-      entradaImpostoValor: emCentavos(l.entrada_imposto_valor),
-      entradaImpostoAliquota: l.entrada_imposto_aliquota === null ? null : Number(l.entrada_imposto_aliquota),
-      servicoTomadoImpostoValor: emCentavos(l.servico_tomado_imposto_valor),
-      servicoTomadoImpostoAliquota:
-        l.servico_tomado_imposto_aliquota === null ? null : Number(l.servico_tomado_imposto_aliquota),
+      icmsDifal: impostoEntradaServico(l.icms_difal_valor, l.icms_difal_aliquota),
+      irrfServicoTomado: impostoEntradaServico(l.irrf_servico_tomado_valor, l.irrf_servico_tomado_aliquota),
+      csrf: impostoEntradaServico(l.csrf_valor, l.csrf_aliquota),
+      issRetido: impostoEntradaServico(l.iss_retido_valor, l.iss_retido_aliquota),
       impostos,
       // Total pago por imposto = valor + juros + multa
       totalImpostos: impostos.reduce((t, i) => t + i.valor + i.juros + i.multa, 0),
@@ -182,7 +200,9 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
           nome: p.nome as string,
           tipo: p.tipo as 'socio' | 'colaborador',
           valor: emCentavos(p.valor),
-          tributos: emCentavos(p.tributos),
+          valorLiquido: emCentavos(p.valor_liquido),
+          guiaFgts: emCentavos(p.guia_fgts),
+          guiaDctfweb: emCentavos(p.guia_dctfweb),
         })),
       acoes: (aco.data ?? [])
         .filter((a) => a.lancamento_id === l.id)
@@ -207,6 +227,7 @@ export async function carregarDados(empresaId: string): Promise<DadosEmpresa> {
       nome: s.nome,
       cota: Number(s.cota_percentual),
       ordem: s.ordem,
+      cpf: s.cpf ?? null,
     })),
     lancamentos,
   };
@@ -228,8 +249,6 @@ export type ResultadoPainel = {
   totalImpostos: number;
   carga: number | null;
   cargaMenorQueAnterior: boolean;
-  cenario: number;
-  economiaAno: number;
   nfe: { qtd: number; valor: number };
   nfse: { qtd: number; valor: number };
   entradaProduto: { qtd: number };
@@ -237,8 +256,10 @@ export type ResultadoPainel = {
   totalNfs: number;
   // Impostos sobre NF de entrada/serviços tomados: não entram no totalImpostos/carga, por
   // enquanto. aliquota segue a mesma regra dos demais: nunca calculada, só a digitada.
-  entradaImposto: { valor: number; aliquota: number | 'variavel' | null };
-  servicoTomadoImposto: { valor: number; aliquota: number | 'variavel' | null };
+  icmsDifal: { valor: number; aliquota: number | 'variavel' | null };
+  irrfServicoTomado: { valor: number; aliquota: number | 'variavel' | null };
+  csrf: { valor: number; aliquota: number | 'variavel' | null };
+  issRetido: { valor: number; aliquota: number | 'variavel' | null };
   // aliquota: a digitada; 'variavel' = mudou entre os meses do período; null = não informada
   // valor: só o imposto (principal); juros/multa: encargos por atraso, somados à parte
   impostos: {
@@ -251,7 +272,14 @@ export type ResultadoPainel = {
     periodicidade: 'mensal' | 'trimestral';
   }[];
   socios: { id: string; nome: string; ordem: number; distribuicao: number; tributos: number }[];
-  folha: { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }[];
+  folha: {
+    nome: string;
+    tipo: 'socio' | 'colaborador';
+    valor: number;
+    valorLiquido: number;
+    guiaFgts: number;
+    guiaDctfweb: number;
+  }[];
   acoes: { mes: string; titulo: string; descricao: string }[];
   evolucao: { mes: string; carga: number }[];
 };
@@ -264,7 +292,6 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
   const meses = contarMeses(de, ate);
   const atuais = noIntervalo(de, ate);
   const anteriores = noIntervalo(deslocarMes(de, -meses), deslocarMes(de, -1));
-  const noAno = noIntervalo(`${ate.slice(0, 4)}-01`, ate);
 
   const faturamento = soma(atuais, (l) => l.faturamento);
   const faturamentoAnterior = soma(anteriores, (l) => l.faturamento);
@@ -364,14 +391,19 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
   });
 
   // Folha de pagamento: soma por pessoa (nome + tipo) ao longo do período selecionado.
-  const folhaPorPessoa = new Map<string, { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }>();
+  const folhaPorPessoa = new Map<
+    string,
+    { nome: string; tipo: 'socio' | 'colaborador'; valor: number; valorLiquido: number; guiaFgts: number; guiaDctfweb: number }
+  >();
   for (const l of atuais) {
     for (const p of l.folha) {
       const chave = `${p.tipo}:${p.nome}`;
       const atual = folhaPorPessoa.get(chave);
       if (atual) {
         atual.valor += p.valor;
-        atual.tributos += p.tributos;
+        atual.valorLiquido += p.valorLiquido;
+        atual.guiaFgts += p.guiaFgts;
+        atual.guiaDctfweb += p.guiaDctfweb;
       } else {
         folhaPorPessoa.set(chave, { ...p });
       }
@@ -411,21 +443,26 @@ export function calcularPainel(dados: DadosEmpresa, de: string, ate: string): Re
     totalImpostos,
     carga,
     cargaMenorQueAnterior: carga !== null && cargaAnterior !== null && carga < cargaAnterior,
-    cenario: soma(atuais, (l) => l.cenario),
-    // Economia acumulada no ano: só conta os meses em que o cenário sem otimização foi informado
-    economiaAno: noAno.filter((l) => l.cenario > 0).reduce((t, l) => t + (l.cenario - l.totalImpostos), 0),
     nfe: { qtd: soma(atuais, (l) => l.nfeQtd), valor: soma(atuais, (l) => l.nfeValor) },
     nfse: { qtd: soma(atuais, (l) => l.nfseQtd), valor: soma(atuais, (l) => l.nfseValor) },
     entradaProduto: { qtd: soma(atuais, (l) => l.entradaProdutoQtd) },
     entradaServico: { qtd: soma(atuais, (l) => l.entradaServicoQtd) },
     totalNfs: soma(atuais, (l) => l.nfeQtd + l.nfseQtd + l.entradaProdutoQtd + l.entradaServicoQtd),
-    entradaImposto: {
-      valor: soma(atuais, (l) => l.entradaImpostoValor),
-      aliquota: aliquotaEntradaPeriodo((l) => l.entradaImpostoValor, (l) => l.entradaImpostoAliquota),
+    icmsDifal: {
+      valor: soma(atuais, (l) => l.icmsDifal.valor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.icmsDifal.valor, (l) => l.icmsDifal.aliquota),
     },
-    servicoTomadoImposto: {
-      valor: soma(atuais, (l) => l.servicoTomadoImpostoValor),
-      aliquota: aliquotaEntradaPeriodo((l) => l.servicoTomadoImpostoValor, (l) => l.servicoTomadoImpostoAliquota),
+    irrfServicoTomado: {
+      valor: soma(atuais, (l) => l.irrfServicoTomado.valor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.irrfServicoTomado.valor, (l) => l.irrfServicoTomado.aliquota),
+    },
+    csrf: {
+      valor: soma(atuais, (l) => l.csrf.valor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.csrf.valor, (l) => l.csrf.aliquota),
+    },
+    issRetido: {
+      valor: soma(atuais, (l) => l.issRetido.valor),
+      aliquota: aliquotaEntradaPeriodo((l) => l.issRetido.valor, (l) => l.issRetido.aliquota),
     },
     impostos,
     socios,

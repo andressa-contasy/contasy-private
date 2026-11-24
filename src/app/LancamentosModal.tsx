@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
   brl,
@@ -37,22 +38,33 @@ type Lancamento = {
   id: string;
   mes_referencia: string; // 'AAAA-MM'
   faturamento: number;
-  cenario_sem_otimizacao: number;
   nfe_produto_qtd: number;
   nfe_produto_valor: number;
   nfse_servico_qtd: number;
   nfse_servico_valor: number;
   entrada_produto_qtd: number;
   entrada_servico_qtd: number;
-  entrada_imposto_valor: number;
-  entrada_imposto_aliquota: number | null;
-  servico_tomado_imposto_valor: number;
-  servico_tomado_imposto_aliquota: number | null;
+  icms_difal_valor: number;
+  icms_difal_aliquota: number | null;
+  irrf_servico_tomado_valor: number;
+  irrf_servico_tomado_aliquota: number | null;
+  csrf_valor: number;
+  csrf_aliquota: number | null;
+  iss_retido_valor: number;
+  iss_retido_aliquota: number | null;
 };
 
 type Remuneracao = { distribuicao: number; tributos: number }; // em centavos
 type Acao = { titulo: string; descricao: string };
-type PessoaFolha = { nome: string; tipo: 'socio' | 'colaborador'; valor: number; tributos: number }; // valor/tributos em centavos
+// valor/valorLiquido/guiaFgts/guiaDctfweb em centavos. valorLiquido só se aplica a Lucro Presumido.
+type PessoaFolha = {
+  nome: string;
+  tipo: 'socio' | 'colaborador';
+  valor: number;
+  valorLiquido: number;
+  guiaFgts: number;
+  guiaDctfweb: number;
+};
 
 // "0,65" -> 0.65. Vazio ou fora de 0–100 -> null (sem alíquota informada)
 function lerAliquota(texto: string | undefined) {
@@ -66,6 +78,16 @@ const DICAS_IMPOSTO: Record<string, string> = {
   ICMS: 'Incide sobre notas de produto (NF-e).',
 };
 
+// Ícone de informação com tooltip nativo (title) — usado nos campos cujo significado
+// não é óbvio só pelo rótulo (ex.: "Valor" que não é o total, e sim só parte dele).
+function InfoTooltip({ texto }: { texto: string }) {
+  return (
+    <span title={texto} className="ml-1 inline-flex cursor-help align-middle text-slate-500 hover:text-[#d8b362]">
+      <Info size={13} />
+    </span>
+  );
+}
+
 function CampoMoeda({
   id,
   rotulo,
@@ -73,6 +95,7 @@ function CampoMoeda({
   onChange,
   disabled,
   dica,
+  tooltip,
 }: {
   id: string;
   rotulo: string;
@@ -80,11 +103,13 @@ function CampoMoeda({
   onChange: (centavos: number) => void;
   disabled?: boolean;
   dica?: string;
+  tooltip?: string;
 }) {
   return (
     <div>
       <label htmlFor={id} className={labelClasses}>
         {rotulo}
+        {tooltip && <InfoTooltip texto={tooltip} />}
       </label>
       <input
         id={id}
@@ -149,13 +174,16 @@ export default function LancamentosModal({
   const [nfseValor, setNfseValor] = useState(0);
   const [entradaProdutoQtd, setEntradaProdutoQtd] = useState('0');
   const [entradaServicoQtd, setEntradaServicoQtd] = useState('0');
-  // Impostos sobre Nota Fiscal de Entrada / Serviços Tomados (ex.: ICMS Difal, retenções).
-  // Não entram no Total de Impostos Apurados nem na Carga Tributária Efetiva por enquanto.
-  const [entradaImpostoValor, setEntradaImpostoValor] = useState(0);
-  const [entradaImpostoAliquota, setEntradaImpostoAliquota] = useState('');
-  const [servicoTomadoImpostoValor, setServicoTomadoImpostoValor] = useState(0);
-  const [servicoTomadoImpostoAliquota, setServicoTomadoImpostoAliquota] = useState('');
-  const [cenario, setCenario] = useState(0);
+  // Impostos sobre Nota Fiscal de Entrada / Serviços Tomados. Não entram no Total de
+  // Impostos Apurados nem na Carga Tributária Efetiva por enquanto.
+  const [icmsDifalValor, setIcmsDifalValor] = useState(0);
+  const [icmsDifalAliquota, setIcmsDifalAliquota] = useState('');
+  const [irrfServicoTomadoValor, setIrrfServicoTomadoValor] = useState(0);
+  const [irrfServicoTomadoAliquota, setIrrfServicoTomadoAliquota] = useState('');
+  const [csrfValor, setCsrfValor] = useState(0);
+  const [csrfAliquota, setCsrfAliquota] = useState('');
+  const [issRetidoValor, setIssRetidoValor] = useState(0);
+  const [issRetidoAliquota, setIssRetidoAliquota] = useState('');
   const [valoresImposto, setValoresImposto] = useState<Record<string, number>>({});
   // Juros e multa por atraso, por imposto (centavos) — normalmente zero
   const [valoresJuros, setValoresJuros] = useState<Record<string, number>>({});
@@ -201,7 +229,6 @@ export default function LancamentosModal({
     0,
   );
   const carga = faturamento > 0 ? Math.round((totalImpostos / faturamento) * 10000) / 100 : 0;
-  const economia = cenario - totalImpostos;
   const somaNfs = nfeValor + nfseValor;
 
   const resetCampos = useCallback(() => {
@@ -212,11 +239,14 @@ export default function LancamentosModal({
     setNfseValor(0);
     setEntradaProdutoQtd('0');
     setEntradaServicoQtd('0');
-    setEntradaImpostoValor(0);
-    setEntradaImpostoAliquota('');
-    setServicoTomadoImpostoValor(0);
-    setServicoTomadoImpostoAliquota('');
-    setCenario(0);
+    setIcmsDifalValor(0);
+    setIcmsDifalAliquota('');
+    setIrrfServicoTomadoValor(0);
+    setIrrfServicoTomadoAliquota('');
+    setCsrfValor(0);
+    setCsrfAliquota('');
+    setIssRetidoValor(0);
+    setIssRetidoAliquota('');
     setValoresImposto({});
     setValoresJuros({});
     setValoresMulta({});
@@ -337,7 +367,7 @@ export default function LancamentosModal({
         supabase.from('acoes_mes').select('titulo, descricao').eq('lancamento_id', existente.id).order('ordem'),
         supabase
           .from('folha_pagamento')
-          .select('nome, tipo, valor, tributos')
+          .select('nome, tipo, valor, valor_liquido, guia_fgts, guia_dctfweb')
           .eq('lancamento_id', existente.id)
           .order('ordem'),
       ]);
@@ -356,19 +386,15 @@ export default function LancamentosModal({
       setNfseValor(emCentavos(existente.nfse_servico_valor));
       setEntradaProdutoQtd(String(existente.entrada_produto_qtd ?? 0));
       setEntradaServicoQtd(String(existente.entrada_servico_qtd ?? 0));
-      setEntradaImpostoValor(emCentavos(existente.entrada_imposto_valor));
-      setEntradaImpostoAliquota(
-        existente.entrada_imposto_aliquota === null
-          ? ''
-          : String(Number(existente.entrada_imposto_aliquota)).replace('.', ','),
-      );
-      setServicoTomadoImpostoValor(emCentavos(existente.servico_tomado_imposto_valor));
-      setServicoTomadoImpostoAliquota(
-        existente.servico_tomado_imposto_aliquota === null
-          ? ''
-          : String(Number(existente.servico_tomado_imposto_aliquota)).replace('.', ','),
-      );
-      setCenario(emCentavos(existente.cenario_sem_otimizacao));
+      const comoTexto = (v: number | null) => (v === null ? '' : String(Number(v)).replace('.', ','));
+      setIcmsDifalValor(emCentavos(existente.icms_difal_valor));
+      setIcmsDifalAliquota(comoTexto(existente.icms_difal_aliquota));
+      setIrrfServicoTomadoValor(emCentavos(existente.irrf_servico_tomado_valor));
+      setIrrfServicoTomadoAliquota(comoTexto(existente.irrf_servico_tomado_aliquota));
+      setCsrfValor(emCentavos(existente.csrf_valor));
+      setCsrfAliquota(comoTexto(existente.csrf_aliquota));
+      setIssRetidoValor(emCentavos(existente.iss_retido_valor));
+      setIssRetidoAliquota(comoTexto(existente.iss_retido_aliquota));
 
       // Impostos lançados nesse mês que não fazem mais parte do catálogo do regime atual
       // (ex.: regime simplificado depois). Busca os dados deles para não perder o valor salvo.
@@ -435,7 +461,9 @@ export default function LancamentosModal({
           nome: p.nome,
           tipo: p.tipo as 'socio' | 'colaborador',
           valor: emCentavos(p.valor),
-          tributos: emCentavos(p.tributos),
+          valorLiquido: emCentavos(p.valor_liquido),
+          guiaFgts: emCentavos(p.guia_fgts),
+          guiaDctfweb: emCentavos(p.guia_dctfweb),
         })),
       );
     })();
@@ -479,28 +507,36 @@ export default function LancamentosModal({
     if (invalida) {
       return falhou('os impostos', `a alíquota de ${invalida.nome} é inválida (use um valor entre 0 e 100).`);
     }
-    if (entradaImpostoAliquota.trim() && lerAliquota(entradaImpostoAliquota) === null) {
-      return falhou('os impostos', 'a alíquota da Nota Fiscal de Entrada é inválida (use um valor entre 0 e 100).');
-    }
-    if (servicoTomadoImpostoAliquota.trim() && lerAliquota(servicoTomadoImpostoAliquota) === null) {
-      return falhou('os impostos', 'a alíquota de Serviços Tomados é inválida (use um valor entre 0 e 100).');
+    const aliquotasEntradaServico: [string, string][] = [
+      ['ICMS Diferencial de Alíquota', icmsDifalAliquota],
+      ['IRRF (Serviços Tomados)', irrfServicoTomadoAliquota],
+      ['CSRF', csrfAliquota],
+      ['ISS Retido', issRetidoAliquota],
+    ];
+    for (const [nome, texto] of aliquotasEntradaServico) {
+      if (texto.trim() && lerAliquota(texto) === null) {
+        return falhou('os impostos', `a alíquota de ${nome} é inválida (use um valor entre 0 e 100).`);
+      }
     }
 
     // 1. Lançamento do mês
     const valores = {
       mes_referencia: mes,
       faturamento: faturamento / 100,
-      cenario_sem_otimizacao: cenario / 100,
       nfe_produto_qtd: parseInt(nfeQtd, 10) || 0,
       nfe_produto_valor: nfeValor / 100,
       nfse_servico_qtd: parseInt(nfseQtd, 10) || 0,
       nfse_servico_valor: nfseValor / 100,
       entrada_produto_qtd: parseInt(entradaProdutoQtd, 10) || 0,
       entrada_servico_qtd: parseInt(entradaServicoQtd, 10) || 0,
-      entrada_imposto_valor: entradaImpostoValor / 100,
-      entrada_imposto_aliquota: lerAliquota(entradaImpostoAliquota),
-      servico_tomado_imposto_valor: servicoTomadoImpostoValor / 100,
-      servico_tomado_imposto_aliquota: lerAliquota(servicoTomadoImpostoAliquota),
+      icms_difal_valor: icmsDifalValor / 100,
+      icms_difal_aliquota: lerAliquota(icmsDifalAliquota),
+      irrf_servico_tomado_valor: irrfServicoTomadoValor / 100,
+      irrf_servico_tomado_aliquota: lerAliquota(irrfServicoTomadoAliquota),
+      csrf_valor: csrfValor / 100,
+      csrf_aliquota: lerAliquota(csrfAliquota),
+      iss_retido_valor: issRetidoValor / 100,
+      iss_retido_aliquota: lerAliquota(issRetidoAliquota),
     };
 
     let lancamentoId: string;
@@ -576,7 +612,9 @@ export default function LancamentosModal({
         nome: p.nome.trim(),
         tipo: p.tipo,
         valor: p.valor / 100,
-        tributos: p.tributos / 100,
+        valor_liquido: p.valorLiquido / 100,
+        guia_fgts: p.guiaFgts / 100,
+        guia_dctfweb: p.guiaDctfweb / 100,
         ordem: i + 1,
       }));
     if (linhasFolha.length > 0) {
@@ -858,6 +896,10 @@ export default function LancamentosModal({
           </Secao>
 
           <Secao titulo="Impostos sobre Nota Fiscal de Entrada/Serviços Tomados">
+            <p className="mb-4 text-xs text-slate-500">
+              Nota Fiscal de Entrada = nota de produto. Serviços Tomados = nota de serviço que a empresa contratou
+              (tomou) de terceiros. Vale para Simples Nacional e Lucro Presumido.
+            </p>
             <div className="grid gap-5">
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -865,19 +907,20 @@ export default function LancamentosModal({
                 </p>
                 <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
                   <CampoMoeda
-                    id="entradaImpostoValor"
-                    rotulo="Valor (R$)"
-                    centavos={entradaImpostoValor}
-                    onChange={setEntradaImpostoValor}
+                    id="icmsDifalValor"
+                    rotulo="ICMS Diferencial de Alíquota (R$)"
+                    centavos={icmsDifalValor}
+                    onChange={setIcmsDifalValor}
+                    tooltip="Não é o total das notas de entrada: é só a soma das notas que tiveram ICMS Difal a recolher (compra interestadual). Esse imposto não vem destacado na nota, por isso é apurado à parte."
                   />
                   <div>
-                    <label htmlFor="entradaImpostoAliquota" className={labelClasses}>Alíquota (%)</label>
+                    <label htmlFor="icmsDifalAliquota" className={labelClasses}>Alíquota (%)</label>
                     <input
-                      id="entradaImpostoAliquota"
+                      id="icmsDifalAliquota"
                       type="text"
                       inputMode="decimal"
-                      value={entradaImpostoAliquota}
-                      onChange={(e) => setEntradaImpostoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                      value={icmsDifalAliquota}
+                      onChange={(e) => setIcmsDifalAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
                       placeholder="Ex.: 0,65"
                       className={inputClasses}
                     />
@@ -886,24 +929,71 @@ export default function LancamentosModal({
               </div>
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Serviços Tomados</p>
-                <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
-                  <CampoMoeda
-                    id="servicoTomadoImpostoValor"
-                    rotulo="Valor (R$)"
-                    centavos={servicoTomadoImpostoValor}
-                    onChange={setServicoTomadoImpostoValor}
-                  />
-                  <div>
-                    <label htmlFor="servicoTomadoImpostoAliquota" className={labelClasses}>Alíquota (%)</label>
-                    <input
-                      id="servicoTomadoImpostoAliquota"
-                      type="text"
-                      inputMode="decimal"
-                      value={servicoTomadoImpostoAliquota}
-                      onChange={(e) => setServicoTomadoImpostoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
-                      placeholder="Ex.: 0,65"
-                      className={inputClasses}
+                <div className="grid gap-5">
+                  <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
+                    <CampoMoeda
+                      id="irrfServicoTomadoValor"
+                      rotulo="IRRF (R$)"
+                      centavos={irrfServicoTomadoValor}
+                      onChange={setIrrfServicoTomadoValor}
+                      tooltip="Não é o total dos serviços tomados: é só a soma das notas em que houve retenção de IRRF."
                     />
+                    <div>
+                      <label htmlFor="irrfServicoTomadoAliquota" className={labelClasses}>Alíquota IRRF (%)</label>
+                      <input
+                        id="irrfServicoTomadoAliquota"
+                        type="text"
+                        inputMode="decimal"
+                        value={irrfServicoTomadoAliquota}
+                        onChange={(e) => setIrrfServicoTomadoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                        placeholder="Ex.: 0,65"
+                        className={inputClasses}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
+                    <CampoMoeda
+                      id="csrfValor"
+                      rotulo="CSRF (R$)"
+                      centavos={csrfValor}
+                      onChange={setCsrfValor}
+                      dica="PIS + COFINS + CSLL retidos na fonte."
+                      tooltip="Não é o total dos serviços tomados: é só a soma das notas em que houve retenção de CSRF."
+                    />
+                    <div>
+                      <label htmlFor="csrfAliquota" className={labelClasses}>Alíquota CSRF (%)</label>
+                      <input
+                        id="csrfAliquota"
+                        type="text"
+                        inputMode="decimal"
+                        value={csrfAliquota}
+                        onChange={(e) => setCsrfAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                        placeholder="Ex.: 0,65"
+                        className={inputClasses}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-[1.6fr_1fr]">
+                    <CampoMoeda
+                      id="issRetidoValor"
+                      rotulo="ISS Retido (R$)"
+                      centavos={issRetidoValor}
+                      onChange={setIssRetidoValor}
+                      dica="ISS retido na fonte pela empresa, sobre o serviço que ela tomou de terceiros."
+                      tooltip="Não é o total dos serviços tomados: é só a soma das notas em que a empresa reteve o ISS de quem prestou o serviço."
+                    />
+                    <div>
+                      <label htmlFor="issRetidoAliquota" className={labelClasses}>Alíquota ISS Retido (%)</label>
+                      <input
+                        id="issRetidoAliquota"
+                        type="text"
+                        inputMode="decimal"
+                        value={issRetidoAliquota}
+                        onChange={(e) => setIssRetidoAliquota(e.target.value.replace(/[^\d.,]/g, ''))}
+                        placeholder="Ex.: 0,65"
+                        className={inputClasses}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -911,28 +1001,6 @@ export default function LancamentosModal({
             <p className="mt-3 text-xs text-slate-500">
               Esses valores não entram no Total de Impostos Apurados nem na Carga Tributária Efetiva, por enquanto.
             </p>
-          </Secao>
-
-          <Secao titulo="Planejamento e Economia Tributária">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <CampoMoeda id="cenario" rotulo="Cenário sem otimização (R$)" centavos={cenario} onChange={setCenario} />
-              <div>
-                <span className={labelClasses}>Com otimização Private</span>
-                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-semibold text-emerald-300">
-                  {formatarCentavos(totalImpostos)}
-                </div>
-              </div>
-              <div>
-                <span className={labelClasses}>Economia do mês</span>
-                <div
-                  className={`rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-semibold ${
-                    economia < 0 ? 'text-red-300' : 'text-[#d8b362]'
-                  }`}
-                >
-                  {cenario > 0 ? formatarCentavos(economia) : '—'}
-                </div>
-              </div>
-            </div>
           </Secao>
 
           <Secao titulo="Distribuição de Lucros">
@@ -969,70 +1037,92 @@ export default function LancamentosModal({
           <Secao titulo="Folha de Pagamento">
             <div className="grid gap-3">
               {folha.map((p, i) => (
-                <div
-                  key={i}
-                  className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3 sm:grid-cols-[1fr_1.4fr_1fr_1fr]"
-                >
-                  <div>
-                    <label htmlFor={`folha-tipo-${i}`} className={labelClasses}>Tipo</label>
-                    <select
-                      id={`folha-tipo-${i}`}
-                      value={p.tipo}
-                      onChange={(e) => {
-                        const tipo = e.target.value as 'socio' | 'colaborador';
-                        setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, tipo, nome: '' } : x)));
-                      }}
-                      className={inputClasses}
-                    >
-                      <option value="socio">Sócio</option>
-                      <option value="colaborador">Colaborador</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor={`folha-nome-${i}`} className={labelClasses}>Nome</label>
-                    {p.tipo === 'socio' ? (
+                <div key={i} className="grid gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
+                    <div>
+                      <label htmlFor={`folha-tipo-${i}`} className={labelClasses}>Tipo</label>
                       <select
-                        id={`folha-nome-${i}`}
-                        value={p.nome}
-                        onChange={(e) =>
-                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
-                        }
+                        id={`folha-tipo-${i}`}
+                        value={p.tipo}
+                        onChange={(e) => {
+                          const tipo = e.target.value as 'socio' | 'colaborador';
+                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, tipo, nome: '' } : x)));
+                        }}
                         className={inputClasses}
                       >
-                        <option value="">Selecione...</option>
-                        {socios.map((s) => (
-                          <option key={s.id} value={s.nome}>{s.nome}</option>
-                        ))}
+                        <option value="socio">Sócio</option>
+                        <option value="colaborador">Colaborador</option>
                       </select>
-                    ) : (
-                      <input
-                        id={`folha-nome-${i}`}
-                        type="text"
-                        value={p.nome}
-                        onChange={(e) =>
-                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
+                    </div>
+                    <div>
+                      <label htmlFor={`folha-nome-${i}`} className={labelClasses}>Nome</label>
+                      {p.tipo === 'socio' ? (
+                        <select
+                          id={`folha-nome-${i}`}
+                          value={p.nome}
+                          onChange={(e) =>
+                            setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
+                          }
+                          className={inputClasses}
+                        >
+                          <option value="">Selecione...</option>
+                          {socios.map((s) => (
+                            <option key={s.id} value={s.nome}>{s.nome}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id={`folha-nome-${i}`}
+                          type="text"
+                          value={p.nome}
+                          onChange={(e) =>
+                            setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)))
+                          }
+                          placeholder="Nome do colaborador"
+                          className={inputClasses}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className={`grid gap-3 sm:grid-cols-2 ${
+                      empresa.regime_tributario === 'lucro_presumido' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+                    }`}
+                  >
+                    <CampoMoeda
+                      id={`folha-valor-${i}`}
+                      rotulo="Valor (R$)"
+                      centavos={p.valor}
+                      onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, valor: c } : x)))}
+                    />
+                    {empresa.regime_tributario === 'lucro_presumido' && (
+                      <CampoMoeda
+                        id={`folha-liquido-${i}`}
+                        rotulo="Valor Líquido do Funcionário (R$)"
+                        centavos={p.valorLiquido}
+                        onChange={(c) =>
+                          setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, valorLiquido: c } : x)))
                         }
-                        placeholder="Nome do colaborador"
-                        className={inputClasses}
                       />
                     )}
+                    <CampoMoeda
+                      id={`folha-fgts-${i}`}
+                      rotulo="Guia FGTS (R$)"
+                      centavos={p.guiaFgts}
+                      onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, guiaFgts: c } : x)))}
+                    />
+                    <CampoMoeda
+                      id={`folha-dctfweb-${i}`}
+                      rotulo="Guia DCTFWeb (R$)"
+                      centavos={p.guiaDctfweb}
+                      dica="INSS + IRRF retidos do funcionário, mais o INSS Patronal (quando Lucro Presumido)."
+                      onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, guiaDctfweb: c } : x)))}
+                    />
                   </div>
-                  <CampoMoeda
-                    id={`folha-valor-${i}`}
-                    rotulo="Valor (R$)"
-                    centavos={p.valor}
-                    onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, valor: c } : x)))}
-                  />
-                  <CampoMoeda
-                    id={`folha-tributos-${i}`}
-                    rotulo="Tributos (R$)"
-                    centavos={p.tributos}
-                    onChange={(c) => setFolha((prev) => prev.map((x, j) => (j === i ? { ...x, tributos: c } : x)))}
-                  />
                   <button
                     type="button"
                     onClick={() => setFolha((prev) => prev.filter((_, j) => j !== i))}
-                    className="justify-self-start text-xs text-slate-400 hover:text-red-300 sm:col-span-4"
+                    className="justify-self-start text-xs text-slate-400 hover:text-red-300"
                   >
                     Remover pessoa
                   </button>
@@ -1040,7 +1130,12 @@ export default function LancamentosModal({
               ))}
               <button
                 type="button"
-                onClick={() => setFolha((prev) => [...prev, { nome: '', tipo: 'socio', valor: 0, tributos: 0 }])}
+                onClick={() =>
+                  setFolha((prev) => [
+                    ...prev,
+                    { nome: '', tipo: 'socio', valor: 0, valorLiquido: 0, guiaFgts: 0, guiaDctfweb: 0 },
+                  ])
+                }
                 className={`${ghostButtonClasses} justify-self-start px-3 py-1.5 rounded-lg text-sm`}
               >
                 + Adicionar pessoa

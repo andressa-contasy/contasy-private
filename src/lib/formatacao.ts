@@ -9,6 +9,16 @@ export const formatarCentavos = (centavos: number) => brl.format(centavos / 100)
 export const emCentavos = (valor: number | string | null | undefined) =>
   Math.round(Number(valor ?? 0) * 100);
 
+// Aplica a máscara XXX.XXX.XXX-XX enquanto o usuário digita.
+export function mascararCpf(valor: string) {
+  const d = valor.replace(/\D/g, '').slice(0, 11);
+  let r = d.slice(0, 3);
+  if (d.length > 3) r += '.' + d.slice(3, 6);
+  if (d.length > 6) r += '.' + d.slice(6, 9);
+  if (d.length > 9) r += '-' + d.slice(9, 11);
+  return r;
+}
+
 export function mesAtual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -39,6 +49,16 @@ export const rotuloRegime = (regime?: string | null) =>
 
 export const rotuloPorte = (porte?: string | null) =>
   porte ? (PORTES[porte as keyof typeof PORTES] ?? porte) : '—';
+
+export const STATUS_CLIENTE = {
+  ativa_mensal: 'Ativa — Paga Mensalmente',
+  ativa_parceria: 'Ativa — Parceria',
+  inadimplente: 'Inadimplente',
+  em_migracao: 'Em Processo de Migração',
+} as const;
+
+export const rotuloStatusCliente = (status?: string | null) =>
+  status ? (STATUS_CLIENTE[status as keyof typeof STATUS_CLIENTE] ?? status) : 'Sem tag';
 
 // Soma as alíquotas digitadas dos impostos de uma guia (um mês). Se faltar a alíquota de
 // algum imposto lançado naquele mês, retorna null em vez de somar só uma parte — uma soma
